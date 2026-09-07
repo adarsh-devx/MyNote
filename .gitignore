@@ -8,3 +8,5 @@ dist/
 
 
 .freebuff
+target/
+src-tauri/target/
