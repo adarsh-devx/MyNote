@@ -23,6 +23,29 @@ export const env = {
     return process.env.CLIENT_URL || 'http://localhost:5173'
   },
 
+  /**
+   * CORS allowlist for credentialed requests.
+   *
+   * Must include BOTH the hosted web client and the Tauri desktop webview
+   * origins. The bundled desktop frontend is served from http://tauri.localhost
+   * (Tauri v2 on Windows); if it is missing, every credentialed API call from
+   * the desktop app — including GET /api/auth/me on startup — fails CORS and
+   * the app falls back to the login page on every restart, even though the
+   * WebView2 session cookie itself is persisted correctly.
+   */
+  get allowedOrigins(): string[] {
+    const origins = new Set<string>()
+    if (this.clientUrl) {
+      origins.add(this.clientUrl.replace(/\/+$/, ''))
+    }
+    // Tauri v2 webview origins across platforms (Windows serves the bundled
+    // frontend from http://tauri.localhost).
+    origins.add('http://tauri.localhost')
+    origins.add('https://tauri.localhost')
+    origins.add('tauri://localhost')
+    return [...origins]
+  },
+
   get isProduction(): boolean {
     return process.env.NODE_ENV === 'production'
   },

@@ -27,12 +27,16 @@ const app = express()
 app.set('trust proxy', 1)
 
 const port = env.port
-const clientUrl = env.clientUrl
 
-// CORS with credentials
+// CORS with credentials. The allowlist must cover the hosted web client AND
+// the Tauri desktop webview origin (http://tauri.localhost, see
+// env.allowedOrigins). Without the desktop origin, the bundled frontend's
+// credentialed requests — GET /api/auth/me on startup — are CORS-blocked by
+// the browser, and the desktop app shows the login page again after every
+// restart even though the WebView2 session cookie was persisted correctly.
 app.use(
   cors({
-    origin: clientUrl,
+    origin: env.allowedOrigins,
     credentials: true,
   }),
 )
