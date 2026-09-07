@@ -19,6 +19,13 @@ import { itemRouter } from './routes/item.routes.js'
 import { authRouter } from './routes/auth.routes.js'
 
 const app = express()
+
+// Render terminates TLS at its proxy and forwards plain HTTP to the app with
+// X-Forwarded-Proto. Without this, Express sees an insecure request and
+// express-session refuses to send the `secure` cookie (Set-Cookie is silently
+// dropped), so the OAuth session never reaches the browser -> login loop.
+app.set('trust proxy', 1)
+
 const port = env.port
 const clientUrl = env.clientUrl
 
