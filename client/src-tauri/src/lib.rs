@@ -1,5 +1,4 @@
-use tauri::{Manager, RunEvent};
-use tauri_plugin_notification::NotificationExt;
+use tauri::{Emitter, Manager};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -14,18 +13,18 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![greet])
         .setup(|app| {
             // Get the main window
-            let window = app.get_webview_window("main").unwrap();
-            
-            // Check for pending notifications on startup
-            let window_clone = window.clone();
-            tauri::async_runtime::spawn(async move {
-                // Wait a moment for the frontend to load
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                
-                // The actual notification check will be handled by the frontend
-                // since it needs to make authenticated API calls
-                let _ = window_clone.emit("check-pending-notifications", ());
-            });
+            if let Some(window) = app.get_webview_window("main") {
+                // Check for pending notifications on startup
+                let window_clone = window.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Wait a moment for the frontend to load
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    
+                    // The actual notification check will be handled by the frontend
+                    // since it needs to make authenticated API calls
+                    let _ = window_clone.emit("check-pending-notifications", ());
+                });
+            }
             
             Ok(())
         })
@@ -36,7 +35,7 @@ pub fn run() {
                 // for potential future notification checks
                 #[cfg(target_os = "windows")]
                 {
-                    window.hide().unwrap();
+                    let _ = window.hide();
                     api.prevent_close();
                 }
             }
