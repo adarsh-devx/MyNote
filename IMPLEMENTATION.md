@@ -594,14 +594,20 @@ The backend must still verify Google identity server-side.
 
 ### Phase 5 — Windows app
 - [x] Tauri v2 wrapper (single main window)
-- [x] Windows autostart support (hide on close)
+- [x] Windows autostart (official tauri-plugin-autostart, Run key, `--autostart` flag)
+- [x] Background-first lifecycle: close window → hidden in tray (polling keeps running)
+- [x] System tray (Open MyNotes / Quit MyNotes; left-click opens)
+- [x] Single instance (tauri-plugin-single-instance) — no duplicate pollers; notification click / second launch focuses the running window
+- [x] Hidden launch at Windows logon (no window popup at boot)
 - [x] Native Windows notifications (via tauri-plugin-notification)
-- [x] Startup notification check (pending tasks)
+- [x] Background polling every ~20s for pending tasks (works with window closed)
+- [x] No toast while the main window is focused (WhatsApp-style)
 - [x] Notification privacy (only count, no task details)
-- [x] Mark delivered endpoint (atomic server-side)
+- [x] Mark delivered endpoint (atomic server-side, after successful show)
 - [x] Backend notification endpoints (GET /pending, POST /delivered)
 - [x] User isolation (server-side userId from session)
 - [x] Shared React UI (same as web/PWA)
+- [x] Production desktop build pinned to the deployed API via `client/.env.tauri` (build fails if VITE_API_URL is localhost/missing)
 
 ### Phase 6 — Polish
 - [ ] Edit experience

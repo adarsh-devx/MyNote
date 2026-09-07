@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "node scripts/tauri-frontend-build.mjs",
     "frontendDist": "../dist"
   },
   "app": {
@@ -17,7 +17,8 @@
         "height": 768,
         "minWidth": 600,
         "minHeight": 400,
-        "center": true
+        "center": true,
+        "visible": false
       }
     ],
     "security": {

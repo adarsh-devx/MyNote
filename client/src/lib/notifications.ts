@@ -2,6 +2,12 @@ import { getCurrentUser } from './api'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
+// How often the background poller asks the server for pending notifications.
+// Chromium throttles plain setInterval chains in hidden windows, so the next
+// tick is scheduled from the previous check's completion instead (timers
+// scheduled from fetch continuations are not treated as chained timers).
+const POLL_INTERVAL_MS = 20_000
+
 // Check if running in Tauri.
 // Tauri v2 always injects __TAURI_INTERNALS__ into app webviews; the __TAURI__
 // global API namespace only exists when withGlobalTauri is enabled in
@@ -71,12 +77,25 @@ async function showNotification(count: number): Promise<void> {
   await sendNotification({ title, body })
 }
 
-// Only one pending-notification check may run at a time, so the startup
-// session-confirmed check and the Tauri startup event can never double-fire
-// (which would show duplicate Windows notifications).
+// True while the main window is focused. While the user is actively looking
+// at MyNotes, pending tasks are already visible in the UI, so toasts are
+// suppressed (WhatsApp/Telegram-style: only notify when the app is in the
+// background). A hidden or minimized window is never focused.
+async function isMainWindowFocused(): Promise<boolean> {
+  try {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    return await getCurrentWindow().isFocused()
+  } catch {
+    return true // If the check fails, err on the side of not notifying.
+  }
+}
+
+// Only one pending-notification check may run at a time, so overlapping
+// polls can never double-fire (which would show duplicate Windows toasts).
 let checkInFlight = false
 
-// Main function to check and show pending notifications
+// Main function to check and show pending notifications.
+// Suppressed while the user is actively using MyNotes.
 export async function checkPendingNotifications(): Promise<void> {
   if (checkInFlight) {
     return
@@ -84,6 +103,10 @@ export async function checkPendingNotifications(): Promise<void> {
   checkInFlight = true
 
   try {
+    if (await isMainWindowFocused()) {
+      return
+    }
+
     // Not signed in yet is a normal state (e.g. before login) — skip quietly
     try {
       await getCurrentUser()
@@ -112,45 +135,30 @@ export async function checkPendingNotifications(): Promise<void> {
   }
 }
 
-// Initialize Tauri event listener.
-// Returns a cleanup function that unregisters the listener. Safe against
-// React StrictMode double-mounts: each mount registers its own listener and
-// every unmount disposes it, so exactly one listener stays active.
-export function initTauriNotifications(): () => void {
-  if (!isTauri()) {
-    return () => {}
+// Background notification polling. Runs indefinitely (including while the
+// main window is hidden in the tray) until stopNotificationPolling is called.
+// Each tick is scheduled from the previous tick's completion, so checks never
+// overlap and network failures simply defer the next attempt.
+let pollTimer: ReturnType<typeof setTimeout> | null = null
+
+export function startNotificationPolling(): void {
+  if (!isTauri() || pollTimer !== null) {
+    return
   }
 
-  let disposed = false
-  let unlisten: (() => void) | null = null
+  const tick = (): void => {
+    void checkPendingNotifications().finally(() => {
+      pollTimer = setTimeout(tick, POLL_INTERVAL_MS)
+    })
+  }
 
-  void (async () => {
-    try {
-      // Dynamic import to avoid issues in web builds
-      const { listen } = await import('@tauri-apps/api/event')
+  // Immediate first check (startup), then every POLL_INTERVAL_MS.
+  tick()
+}
 
-      const stopListening = await listen('check-pending-notifications', () => {
-        void checkPendingNotifications()
-      })
-
-      if (disposed) {
-        // Unmounted before the async listener finished registering
-        stopListening()
-        return
-      }
-
-      unlisten = stopListening
-    } catch (error) {
-      console.warn(
-        '[notifications] Failed to register Tauri startup listener:',
-        error instanceof Error ? error.message : error,
-      )
-    }
-  })()
-
-  return () => {
-    disposed = true
-    unlisten?.()
-    unlisten = null
+export function stopNotificationPolling(): void {
+  if (pollTimer !== null) {
+    clearTimeout(pollTimer)
+    pollTimer = null
   }
 }

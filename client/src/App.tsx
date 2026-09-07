@@ -4,9 +4,9 @@ import { Login } from './pages/Login'
 import { OfflineIndicator } from './components/OfflineIndicator'
 import { getCurrentUser } from './lib/api'
 import {
-  checkPendingNotifications,
-  initTauriNotifications,
   isTauri,
+  startNotificationPolling,
+  stopNotificationPolling,
 } from './lib/notifications'
 import type { User } from './types/user'
 
@@ -15,24 +15,20 @@ export default function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Initialize Tauri notifications if running in desktop app.
-    // Returns a cleanup function that unregisters the Tauri event listener.
-    const cleanupNotifications = initTauriNotifications()
-
     getCurrentUser()
       .then((authenticatedUser) => {
         setUser(authenticatedUser)
-        // Session confirmed — run the pending notification check right away
-        // so startup does not race the 2s Rust event. Tauri desktop only:
+        // Session confirmed — start the background notification poller
+        // (immediate first check, then every ~20s). Tauri desktop only:
         // the web PWA must never show or consume desktop notifications.
+        // Polling stops on logout; it restarts after the next login
+        // because the OAuth flow reloads the app.
         if (isTauri()) {
-          void checkPendingNotifications()
+          startNotificationPolling()
         }
       })
       .catch(() => setUser(null))
       .finally(() => setLoading(false))
-
-    return cleanupNotifications
   }, [])
 
   if (loading) {
@@ -58,7 +54,13 @@ export default function App() {
 
   return (
     <>
-      <Home user={user} onLogout={() => setUser(null)} />
+      <Home
+        user={user}
+        onLogout={() => {
+          stopNotificationPolling()
+          setUser(null)
+        }}
+      />
       <OfflineIndicator />
     </>
   )
