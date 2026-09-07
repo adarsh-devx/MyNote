@@ -17,7 +17,11 @@ export function createSessionMiddleware(mongoUri: string) {
       secure: env.isProduction,
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: 'lax',
+      // 'none' in production: the frontend (mynotes-pooq.onrender.com) and the
+      // API (mynote-ydld.onrender.com) are cross-site, so Lax would prevent the
+      // browser from sending the session cookie on fetch requests.
+      // SameSite=None requires Secure, which is guaranteed above in production.
+      sameSite: env.isProduction ? 'none' : 'lax',
     },
     store: MongoStore.create({
       mongoUrl: mongoUri,
