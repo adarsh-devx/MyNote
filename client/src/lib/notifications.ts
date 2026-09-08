@@ -50,17 +50,19 @@ async function markDelivered(): Promise<void> {
   }
 }
 
-// Show the Windows notification through the Tauri notification plugin.
-// PRIVACY: the notification must only contain a generic count message —
-// never task titles, content, or any other item details.
+// Show the Windows notification via the show_toast Tauri command (see
+// src-tauri/src/lib.rs), which creates the toast with a click-to-focus
+// handler attached. PRIVACY: the notification must only contain a generic
+// count message — never task titles, content, or any other item details.
 async function showNotification(count: number): Promise<void> {
   if (!isTauri()) {
     return
   }
 
   // Dynamic import to avoid issues in web builds
-  const { isPermissionGranted, requestPermission, sendNotification } =
-    await import('@tauri-apps/plugin-notification')
+  const { isPermissionGranted, requestPermission } = await import(
+    '@tauri-apps/plugin-notification'
+  )
 
   let permissionGranted = await isPermissionGranted()
   if (!permissionGranted) {
@@ -74,7 +76,14 @@ async function showNotification(count: number): Promise<void> {
   const title = 'MyNotes'
   const body = count === 1 ? 'You have a new task.' : 'You have new tasks.'
 
-  await sendNotification({ title, body })
+  // Shown through the show_toast Rust command instead of the notification
+  // plugin's sendNotification: the plugin's desktop API has no click/activation
+  // support (its onAction listener only works on mobile), so the toast must be
+  // created with its Windows Activated handler attached — that handler shows
+  // and focuses the existing MyNotes window when the toast is clicked.
+  // Title/body content is unchanged.
+  const { invoke } = await import('@tauri-apps/api/core')
+  await invoke('show_toast', { title, body })
 }
 
 // True while the main window is focused. While the user is actively looking

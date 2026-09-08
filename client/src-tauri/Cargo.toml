@@ -23,4 +23,9 @@ tokio = { version = "1", features = ["time"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
+# Official Tauri WinRT toast wrapper — the same crate tauri-plugin-notification
+# uses on Windows (through notify-rust). Used directly so the toast can be
+# created with its WinRT Activated (click) handler attached, which the
+# notification plugin's desktop API does not expose.
+tauri-winrt-notification = "0.7"
 

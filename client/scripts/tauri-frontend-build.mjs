@@ -34,6 +34,14 @@ if (!apiUrl || /localhost|127\.0\.0\.1/i.test(apiUrl)) {
   process.exit(1)
 }
 
+// Desktop build: the frontend runs from assets embedded in the executable,
+// so disable vite-plugin-pwa / service-worker generation. A PWA service
+// worker is not only useless inside Tauri — the shared WebView2 profile
+// throttles SW update checks (once per 24h) and served a stale precache
+// (pre-fix JS) after an app update. The web/PWA build (`npm run build`)
+// is unaffected because it never runs this script.
+process.env.VITE_SKIP_PWA = '1'
+
 console.log(`[tauri-frontend-build] Building frontend with VITE_API_URL=${apiUrl}`)
 const result = spawnSync('npm', ['run', 'build'], {
   cwd: root,

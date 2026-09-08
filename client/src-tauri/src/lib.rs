@@ -53,13 +53,67 @@ fn launched_by_autostart() -> bool {
 }
 
 /// Show, unminimize, and focus the main window. Used by the tray menu,
-/// tray icon clicks, and the single-instance callback (which fires when
-/// Windows activates the app from a notification click or a second launch).
+/// tray icon clicks, the toast click handler (see show_toast), and the
+/// single-instance callback (which fires when a second launch happens).
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+    }
+}
+
+/// Show a Windows toast for pending tasks with click-to-focus wired up.
+///
+/// This produces the same toast the notification plugin produces on Windows
+/// (notify-rust → tauri-winrt-notification): same AUMID, title, body on the
+/// second text line, silent audio, short duration — but it attaches the
+/// WinRT `Activated` handler, because the plugin's desktop implementation
+/// exposes no click/activation API (its JS `onAction` listener only works on
+/// mobile), and a toast created without it just dismisses on click.
+///
+/// Like the plugin's `notify` command, the toast is shown fire-and-forget on
+/// the async runtime, so delivery timing and deduplication are unchanged.
+#[tauri::command]
+async fn show_toast(app: AppHandle, title: String, body: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use tauri_winrt_notification::{Duration, Toast};
+
+        tauri::async_runtime::spawn(async move {
+            let click_app = app.clone();
+            let result = Toast::new(AUMID)
+                .title(&title)
+                // Same toast layout the notification plugin produces:
+                // title, empty first text line, body on the second line.
+                .text1("")
+                .text2(&body)
+                .sound(None)
+                .duration(Duration::Short)
+                .on_activated(move |_| {
+                    let app = click_app.clone();
+                    // The Activated event fires on a WinRT worker thread;
+                    // run the window calls on the main event loop, exactly
+                    // like the tray and single-instance paths.
+                    let _ = click_app.run_on_main_thread(move || show_main_window(&app));
+                    Ok(())
+                })
+                .show();
+            if let Err(error) = result {
+                eprintln!("[mynotes] failed to show toast: {error:?}");
+            }
+        });
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        use tauri_plugin_notification::NotificationExt;
+        app.notification()
+            .builder()
+            .title(&title)
+            .body(&body)
+            .show()
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -75,12 +129,14 @@ pub fn run() {
         ))
         // Exactly one instance may poll the backend for notifications;
         // otherwise duplicate Windows toasts would be possible. When the app
-        // is already running and the user double-clicks the exe or Windows
-        // activates the app from a notification click, this callback runs in
-        // the first instance and brings its window forward.
+        // is already running and the user double-clicks the exe, this
+        // callback runs in the first instance and brings its window forward.
+        // (Toast clicks never start a second process; they are handled
+        // in-process by show_toast's Activated handler.)
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
+        .invoke_handler(tauri::generate_handler![show_toast])
         .setup(|app| {
             // Register the AUMID so Windows recognises MyNotes for toast
             // notifications. This is a no-op on non-Windows platforms.
