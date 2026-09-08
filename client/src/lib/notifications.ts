@@ -1,5 +1,3 @@
-import { getCurrentUser } from './api'
-
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
 // How often the background poller asks the server for pending notifications.
@@ -113,13 +111,6 @@ export async function checkPendingNotifications(): Promise<void> {
 
   try {
     if (await isMainWindowFocused()) {
-      return
-    }
-
-    // Not signed in yet is a normal state (e.g. before login) — skip quietly
-    try {
-      await getCurrentUser()
-    } catch {
       return
     }
 

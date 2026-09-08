@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { ItemType } from '../types/note'
@@ -24,6 +24,11 @@ export function ComposerModal({
   const [title, setTitle] = useState(initialTitle)
   const [content, setContent] = useState(initialContent)
 
+  // Guards the optimistic create submit against a fast double-click: after the
+  // first submit the optimistic item is already on screen, so a second submit
+  // would create a duplicate. Edit keeps its existing (non-optimistic) behavior.
+  const submitted = useRef(false)
+
   const isDirty =
     title.trim().length > 0 ||
     content.trim().length > 0 ||
@@ -40,7 +45,9 @@ export function ComposerModal({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submitted.current) return
     if (!title.trim()) return
+    if (!editMode) submitted.current = true
     onSave(title, content, type)
   }
 

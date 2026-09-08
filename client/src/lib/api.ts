@@ -3,7 +3,11 @@ import type { User } from '../types/user'
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  okStatuses: readonly number[] = [],
+): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
     credentials: 'include',
@@ -12,6 +16,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...options.headers,
     },
   })
+
+  // Some endpoints treat specific non-2xx statuses as acceptable outcomes
+  // (e.g. DELETE returns 404 when the item is already gone).
+  if (okStatuses.includes(response.status)) {
+    return (await response.json()) as T
+  }
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`
@@ -58,7 +68,9 @@ export function updateItem(
 }
 
 export function deleteItem(id: string): Promise<void> {
-  return request<void>(`/items/${id}`, { method: 'DELETE' })
+  // Deleting an already-deleted item (404) achieves the desired final state, so
+  // treat 404 as success instead of an error.
+  return request<void>(`/items/${id}`, { method: 'DELETE' }, [404])
 }
 
 // Auth functions

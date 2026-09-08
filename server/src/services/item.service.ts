@@ -1,4 +1,4 @@
-import { ItemModel, type ItemDocument } from '../models/Item.js'
+import { ItemModel, type Item, type ItemDocument } from '../models/Item.js'
 import type { CreateItemInput, UpdateItemInput } from '../types/item.js'
 
 /**
@@ -6,8 +6,8 @@ import type { CreateItemInput, UpdateItemInput } from '../types/item.js'
  * the server (never from the client) and scopes all queries by it.
  */
 
-export async function getItems(userId: string): Promise<ItemDocument[]> {
-  return ItemModel.find({ userId }).sort({ createdAt: -1 })
+export async function getItems(userId: string): Promise<Item[]> {
+  return ItemModel.find({ userId }).sort({ createdAt: -1 }).lean()
 }
 
 export async function createItem(
@@ -28,12 +28,12 @@ export async function updateItem(
   userId: string,
   itemId: string,
   data: UpdateItemInput,
-): Promise<ItemDocument | null> {
+): Promise<Item | null> {
   return ItemModel.findOneAndUpdate(
     { _id: itemId, userId },
     data,
     { new: true, runValidators: true },
-  )
+  ).lean()
 }
 
 export async function deleteItem(userId: string, itemId: string): Promise<boolean> {

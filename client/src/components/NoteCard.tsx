@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Check } from '../components/animate-ui/icons/check'
@@ -10,7 +11,11 @@ interface NoteCardProps {
   onEdit: (item: NoteItem) => void
 }
 
-export function NoteCard({
+// Memoized NoteCard: Home keeps every prop reference stable (the same `item`
+// object for unaffected cards plus stable callback identities), so React.memo's
+// default shallow comparison skips re-rendering the unaffected cards whenever a
+// single item changes. No custom comparison function is needed.
+export const NoteCard = memo(function NoteCard({
   item,
   onDelete,
   onToggleTask,
@@ -63,4 +68,4 @@ export function NoteCard({
       )}
     </motion.article>
   )
-}
+})

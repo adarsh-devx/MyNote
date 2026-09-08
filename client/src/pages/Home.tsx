@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LogOut, Settings } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { Brand } from '../components/Brand'
@@ -16,6 +16,18 @@ interface HomeProps {
   onLogout: () => void
 }
 
+const TEMP_ID_PREFIX = 'temp-'
+
+/** Client-only id for an item that has not been created on the server yet. */
+function createTempItemId(): string {
+  return `${TEMP_ID_PREFIX}${crypto.randomUUID()}`
+}
+
+/** True when the id belongs to an optimistically created, still-pending item. */
+function isTempId(id: string): boolean {
+  return id.startsWith(TEMP_ID_PREFIX)
+}
+
 export function Home({ user, onLogout }: HomeProps) {
   const [items, setItems] = useState<NoteItem[]>([])
   const [query, setQuery] = useState('')
@@ -24,6 +36,24 @@ export function Home({ user, onLogout }: HomeProps) {
   const [error, setError] = useState<string | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<NoteItem | null>(null)
+
+  // In-flight tracking for optimistic mutations. Refs (not state) are used so
+  // the guards are read/written synchronously across re-renders, without
+  // triggering renders themselves.
+  const pendingDeleteIds = useRef<Set<string>>(new Set())
+  const toggleTargets = useRef<Map<string, boolean>>(new Map())
+  const pendingCreates = useRef<Map<string, NoteItem>>(new Map())
+  const cancelledCreates = useRef<Set<string>>(new Set())
+
+  // Latest-items mirror for the memoized NoteCards. The card callbacks are
+  // stable only if their identity survives unrelated Home re-renders, so they
+  // read item state from this ref (synced right after every items commit)
+  // instead of capturing the `items` array directly.
+  const itemsRef = useRef<NoteItem[]>(items)
+
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
 
   const refreshItems = useCallback(async () => {
     setLoading(true)
@@ -65,13 +95,79 @@ export function Home({ user, onLogout }: HomeProps) {
     content: string,
     type: ItemType,
   ) {
+    const tempId = createTempItemId()
+    const optimisticItem: NoteItem = {
+      id: tempId,
+      title,
+      content,
+      type,
+      completed: false,
+    }
+
+    // Add the item to the UI immediately and close the composer; the POST runs
+    // in the background and replaces the temporary item with the server item.
+    pendingCreates.current.set(tempId, optimisticItem)
+    setItems((current) => [optimisticItem, ...current])
+    setComposerOpen(false)
+
     try {
       const newItem = await api.createItem({ title, content, type })
-      setItems((current) => [newItem, ...current])
+
+      if (cancelledCreates.current.has(tempId)) {
+        // The user deleted the pending item before the server confirmed the
+        // create — drop the optimistic copy and clean up the server-side orphan.
+        pendingCreates.current.delete(tempId)
+        cancelledCreates.current.delete(tempId)
+        void api.deleteItem(newItem.id).catch(() => {
+          // Best-effort cleanup; the item is already gone from the UI.
+        })
+        return
+      }
+
+      const local = pendingCreates.current.get(tempId)
+      pendingCreates.current.delete(tempId)
+
+      // Replace the temporary item with the canonical server item. If the user
+      // toggled completion while the POST was in flight, keep their newer local
+      // intent and sync it to the server so the toggle is not lost.
+      const reconciled =
+        local && local.completed !== newItem.completed
+          ? { ...newItem, completed: local.completed }
+          : newItem
+
+      setItems((current) => {
+        const index = current.findIndex((item) => item.id === tempId)
+        if (index === -1) {
+          // Temp item is gone (e.g. a refresh raced the POST) — prepend the
+          // confirmed item, matching the pre-optimistic behavior.
+          return [reconciled, ...current]
+        }
+        const next = [...current]
+        next[index] = reconciled
+        return next
+      })
+
+      if (reconciled !== newItem) {
+        void api
+          .updateItem(newItem.id, { completed: reconciled.completed })
+          .catch((error) => {
+            setError(
+              error instanceof Error ? error.message : 'Failed to update item.',
+            )
+          })
+      }
       setError(null)
-      setComposerOpen(false)
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to create item.')
+      pendingCreates.current.delete(tempId)
+      setItems((current) => current.filter((item) => item.id !== tempId))
+      // If the user already removed the pending item there is nothing to roll
+      // back, so surface the error only for uncancelled creates.
+      if (!cancelledCreates.current.has(tempId)) {
+        setError(
+          error instanceof Error ? error.message : 'Failed to create item.',
+        )
+      }
+      cancelledCreates.current.delete(tempId)
     }
   }
 
@@ -101,44 +197,134 @@ export function Home({ user, onLogout }: HomeProps) {
     }
   }
 
-  async function handleDelete(id: string) {
-    try {
-      await api.deleteItem(id)
+  // Stable mutation callbacks for the memoized NoteCards: each handler only
+  // depends on refs and setters (never on a captured `items` value), so its
+  // identity stays constant and an unrelated Home re-render (search typing,
+  // filter change, another item's mutation) never invalidates the cards.
+  const handleDelete = useCallback(async (id: string) => {
+    if (isTempId(id)) {
+      // Cancel a pending create: the item has no server id yet, so removing it
+      // locally is the whole operation. The create handler reconciles the server
+      // once the POST settles (cleanup delete on success, no error on failure).
+      pendingCreates.current.delete(id)
+      cancelledCreates.current.add(id)
       setItems((current) => current.filter((item) => item.id !== id))
       setError(null)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to delete item.')
+      return
     }
-  }
 
-  async function handleToggle(id: string) {
-    const current = items.find((item) => item.id === id)
-    if (!current) return
+    // Guard against duplicate DELETE calls for the same item while one is in flight.
+    if (pendingDeleteIds.current.has(id)) return
+    pendingDeleteIds.current.add(id)
+
+    // Capture the item and its position before removing it, for rollback.
+    const currentItems = itemsRef.current
+    const index = currentItems.findIndex((item) => item.id === id)
+    if (index === -1) {
+      pendingDeleteIds.current.delete(id)
+      return
+    }
+    const previous = currentItems[index]
+
+    // Remove it from the UI immediately; the DELETE runs in the background.
+    setItems((current) => current.filter((item) => item.id !== id))
 
     try {
-      const updatedItem = await api.updateItem(id, {
-        completed: !current.completed,
+      await api.deleteItem(id)
+      setError(null)
+    } catch (deleteError) {
+      // Restore the item to its previous position/state.
+      setItems((current) => {
+        if (current.some((item) => item.id === id)) return current
+        const next = [...current]
+        next.splice(Math.min(index, next.length), 0, previous)
+        return next
       })
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Failed to delete item.',
+      )
+    } finally {
+      pendingDeleteIds.current.delete(id)
+    }
+  }, [])
+
+  const handleToggle = useCallback(async (id: string) => {
+    if (isTempId(id)) {
+      // Pending create: flip the card instantly and record the local intent so
+      // it survives the server response, but never PATCH a client-only id.
+      const pending = pendingCreates.current.get(id)
       setItems((currentItems) =>
         currentItems.map((item) =>
-          item.id === id ? updatedItem : item,
+          item.id === id ? { ...item, completed: !item.completed } : item,
         ),
       )
+      if (pending) {
+        pendingCreates.current.set(id, {
+          ...pending,
+          completed: !pending.completed,
+        })
+      }
       setError(null)
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to update item.')
+      return
     }
-  }
+
+    const current = itemsRef.current.find((item) => item.id === id)
+    if (!current) return
+    const target = !current.completed
+
+    // Ignore a redundant click while a request for the same target is pending;
+    // a "toggle back" supersedes the in-flight request instead (latest wins).
+    if (toggleTargets.current.get(id) === target) return
+    toggleTargets.current.set(id, target)
+
+    // Apply the new completed state immediately; the PATCH runs in the background.
+    setItems((currentItems) =>
+      currentItems.map((item) =>
+        item.id === id && item.completed !== target
+          ? { ...item, completed: target }
+          : item,
+      ),
+    )
+
+    try {
+      const updatedItem = await api.updateItem(id, { completed: target })
+      const isLatest = toggleTargets.current.get(id) === target
+      if (isLatest) toggleTargets.current.delete(id)
+
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === id && isLatest ? { ...item, ...updatedItem } : item,
+        ),
+      )
+      if (isLatest) setError(null)
+    } catch (error) {
+      const isLatest = toggleTargets.current.get(id) === target
+      if (isLatest) toggleTargets.current.delete(id)
+
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === id && isLatest ? { ...item, completed: !target } : item,
+        ),
+      )
+      if (isLatest) {
+        setError(
+          error instanceof Error ? error.message : 'Failed to update item.',
+        )
+      }
+    }
+  }, [])
 
   function openComposer() {
     setEditingItem(null)
     setComposerOpen(true)
   }
 
-  function openEditor(item: NoteItem) {
+  const openEditor = useCallback((item: NoteItem) => {
     setEditingItem(item)
     setComposerOpen(true)
-  }
+  }, [])
 
   function closeComposer() {
     setComposerOpen(false)

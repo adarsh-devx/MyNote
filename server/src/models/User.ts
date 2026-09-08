@@ -15,7 +15,6 @@ const userSchema = new Schema<User>(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     email: {
       type: String,

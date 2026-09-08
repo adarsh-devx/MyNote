@@ -1,11 +1,11 @@
 import type { NextFunction, Request, Response } from 'express'
-import type { ItemDocument } from '../models/Item.js'
+import type { Item } from '../models/Item.js'
 import * as itemService from '../services/item.service.js'
 import type { CreateItemInput, ItemDTO, UpdateItemInput } from '../types/item.js'
 import { getCurrentUserId } from '../utils/current-user.js'
 
-/** Map a Mongoose item document to the exact API response shape used since Phase 2. */
-function toItemDTO(item: ItemDocument): ItemDTO {
+/** Map a lean item document to the exact API response shape used since Phase 2. */
+function toItemDTO(item: Item): ItemDTO {
   return {
     id: item._id.toString(),
     title: item.title,

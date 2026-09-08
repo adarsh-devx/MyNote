@@ -2,6 +2,7 @@ import { Schema, model, type HydratedDocument } from 'mongoose'
 import type { ItemType, NotificationState } from '../types/item.js'
 
 export interface Item {
+  _id: { toString(): string }
   userId: string
   title: string
   content: string
@@ -17,7 +18,6 @@ const itemSchema = new Schema<Item>(
     userId: {
       type: String,
       required: true,
-      index: true,
     },
     title: {
       type: String,
