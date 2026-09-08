@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LogOut, Settings } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { Brand } from '../components/Brand'
 import { SearchBar } from '../components/SearchBar'
+import { ProfileMenu } from '../components/ProfileMenu'
 import { FilterTabs } from '../components/FilterTabs'
 import { NoteCard } from '../components/NoteCard'
 import { EmptyState } from '../components/EmptyState'
@@ -355,13 +355,7 @@ export function Home({ user, onLogout }: HomeProps) {
         <Brand />
         <div className="header-actions">
           <SearchBar value={query} onChange={setQuery} />
-          <span className="user-greeting">{user.name.split(' ')[0]}</span>
-          <button className="icon-button" aria-label="Settings">
-            <Settings size={18} />
-          </button>
-          <button className="icon-button" onClick={handleLogout} aria-label="Logout">
-            <LogOut size={18} />
-          </button>
+          <ProfileMenu user={user} onLogout={handleLogout} />
         </div>
       </header>
 
