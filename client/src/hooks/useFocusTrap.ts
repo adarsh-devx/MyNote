@@ -8,11 +8,11 @@ import { useEffect, useRef, type RefObject } from 'react'
  *   const dialogRef = useFocusTrap<HTMLDivElement>()
  *   return <div ref={dialogRef} role="dialog">…</div>
  */
-export function useFocusTrap<T extends HTMLElement = HTMLElement>(): RefObject<T> {
+export function useFocusTrap<T extends HTMLElement = HTMLElement>(): RefObject<T | null> {
   const dialogRef = useRef<T>(null)
 
   useEffect(() => {
-    const dialog = dialogRef.current
+    const dialog = dialogRef.current as T
     if (!dialog) return
 
     // Remember which element had focus before the dialog opened so we can
