@@ -19,6 +19,7 @@ export function FilterTabs({ value, onChange }: FilterTabsProps) {
         <button
           key={filter}
           className={value === filter ? 'filter active' : 'filter'}
+          aria-pressed={value === filter}
           onClick={() => onChange(filter)}
         >
           {label}

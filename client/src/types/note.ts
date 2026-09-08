@@ -7,6 +7,7 @@ export interface NoteItem {
   type: ItemType
   completed: boolean
   notificationState?: 'pending' | 'delivered'
+  deletedAt?: string | null
   createdAt?: string
   updatedAt?: string
 }

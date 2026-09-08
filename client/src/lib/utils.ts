@@ -1,10 +1,14 @@
 /**
- * Minimal, dependency-free class-name merge helper.
- * Stand-in for the shadcn `cn` utility (clsx + tailwind-merge), which this
- * project does not use — the animate-ui components only need plain class
- * joining. Accepts anything (motion's className prop type includes
- * MotionValue placeholders), skips falsy values; later values win.
+ * "Shivam Kumar" -> "SK" — initials for avatar fallbacks.
+ * Takes up to two whitespace-separated parts, uppercases each first letter,
+ * and falls back to "?" for empty names.
  */
-export function cn(...inputs: unknown[]): string {
-  return inputs.filter(Boolean).join(' ')
+export function initialsOf(name: string): string {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+  return initials || '?'
 }

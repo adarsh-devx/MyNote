@@ -9,6 +9,7 @@ export interface Item {
   type: ItemType
   completed: boolean
   notificationState: NotificationState
+  deletedAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -49,6 +50,10 @@ const itemSchema = new Schema<Item>(
       default: 'pending',
       enum: ['pending', 'delivered'],
     },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -56,6 +61,7 @@ const itemSchema = new Schema<Item>(
 )
 
 itemSchema.index({ userId: 1, createdAt: -1 })
+itemSchema.index({ userId: 1, deletedAt: 1 })
 
 export type ItemDocument = HydratedDocument<Item>
 export const ItemModel = model<Item>('Item', itemSchema)

@@ -29,6 +29,7 @@ export interface ItemDTO {
   type: ItemType
   completed: boolean
   notificationState: NotificationState
+  deletedAt: string | null
   createdAt: string | null
   updatedAt: string | null
 }

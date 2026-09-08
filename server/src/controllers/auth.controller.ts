@@ -90,7 +90,12 @@ export function logout(req: Request, res: Response): void {
       res.status(500).json({ error: 'Failed to logout' })
       return
     }
-    res.clearCookie('connect.sid')
+    res.clearCookie('connect.sid', {
+      httpOnly: true,
+      secure: env.isProduction,
+      sameSite: env.isProduction ? 'none' : 'lax',
+      path: '/',
+    })
     res.json({ message: 'Logged out successfully' })
   })
 }

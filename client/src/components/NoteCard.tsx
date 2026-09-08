@@ -1,7 +1,6 @@
 import { memo } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { Check } from '../components/animate-ui/icons/check'
 import type { NoteItem } from '../types/note'
 
 interface NoteCardProps {
@@ -61,7 +60,34 @@ export const NoteCard = memo(function NoteCard({
           onClick={() => onToggleTask(item.id)}
         >
           <span className={item.completed ? 'check checked' : 'check'}>
-            {item.completed && <Check size={14} />}
+            {item.completed && (
+              <motion.svg
+                xmlns="http://www.w3.org/2000/svg"
+                width={14}
+                height={14}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                initial="initial"
+                animate="animate"
+              >
+                <motion.path
+                  d="m4 12 5 5L20 6"
+                  variants={{
+                    initial: { pathLength: 1, opacity: 1, scale: 1 },
+                    animate: {
+                      pathLength: [0, 1],
+                      opacity: [0, 1],
+                      scale: [1, 1.1, 1],
+                      transition: { duration: 0.6, ease: 'easeInOut' },
+                    },
+                  }}
+                />
+              </motion.svg>
+            )}
           </span>
           {item.completed ? 'Completed' : 'Mark complete'}
         </button>

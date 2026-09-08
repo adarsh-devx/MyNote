@@ -5,6 +5,7 @@ import { SearchBar } from '../components/SearchBar'
 import { ProfileMenu } from '../components/ProfileMenu'
 import { FilterTabs } from '../components/FilterTabs'
 import { NoteCard } from '../components/NoteCard'
+import { NoteCardSkeleton } from '../components/NoteCardSkeleton'
 import { EmptyState } from '../components/EmptyState'
 import { ComposerModal } from '../components/ComposerModal'
 import * as api from '../lib/api'
@@ -45,6 +46,10 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   const toggleTargets = useRef<Map<string, boolean>>(new Map())
   const pendingCreates = useRef<Map<string, NoteItem>>(new Map())
   const cancelledCreates = useRef<Set<string>>(new Set())
+  // Monotonic version counter per item id. When an optimistic edit PATCH
+  // settles, it checks whether a newer edit has already superseded it; if so,
+  // the stale failure is silently ignored instead of rolling back newer state.
+  const editVersions = useRef<Map<string, number>>(new Map())
 
   // Latest-items mirror for the memoized NoteCards. The card callbacks are
   // stable only if their identity survives unrelated Home re-renders, so they
@@ -179,22 +184,51 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   ) {
     if (!editingItem) return
 
+    // Capture the item before the optimistic update for rollback.
+    const previous = itemsRef.current.find(
+      (item) => item.id === editingItem.id,
+    )
+    const editId = editingItem.id
+    const editVersion = editVersions.current.get(editId) ?? 0
+    editVersions.current.set(editId, editVersion + 1)
+
+    // Apply the edit optimistically: update the card immediately.
+    setItems((current) =>
+      current.map((item) =>
+        item.id === editId
+          ? { ...item, title, content, type }
+          : item,
+      ),
+    )
+
+    // Close the modal immediately — no waiting for the server.
+    setComposerOpen(false)
+    setEditingItem(null)
+
     try {
-      const updatedItem = await api.updateItem(editingItem.id, {
-        title,
-        content,
-        type,
-      })
-      setItems((current) =>
-        current.map((item) =>
-          item.id === updatedItem.id ? updatedItem : item,
-        ),
-      )
+      await api.updateItem(editId, { title, content, type })
+      // Success: keep the optimistic state.
       setError(null)
-      setComposerOpen(false)
-      setEditingItem(null)
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to update item.')
+      // Only rollback if no newer edit supersedes this one.
+      const isLatest = editVersions.current.get(editId) === editVersion + 1
+      if (isLatest) {
+        editVersions.current.delete(editId)
+        // Restore the previous item if it still exists in the list
+        // (it may have been deleted or replaced since).
+        if (previous) {
+          setItems((current) => {
+            const idx = current.findIndex((item) => item.id === editId)
+            if (idx === -1) return current
+            const next = [...current]
+            next[idx] = previous
+            return next
+          })
+        }
+        setError(
+          error instanceof Error ? error.message : 'Failed to update item.',
+        )
+      }
     }
   }
 
@@ -340,6 +374,29 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     }
   }
 
+  const handleRestoreItem = useCallback((restored: NoteItem) => {
+    setItems((current) => {
+      const idx = current.findIndex((item) => item.id === restored.id)
+      if (idx !== -1) {
+        // Item already present (unlikely but safe) — update it.
+        const next = [...current]
+        next[idx] = restored
+        return next
+      }
+      // Insert in creation-date order (newest first).
+      const createdAt = restored.createdAt
+        ? new Date(restored.createdAt).getTime()
+        : 0
+      const insertAt = current.findIndex((item) => {
+        const t = item.createdAt ? new Date(item.createdAt).getTime() : 0
+        return t < createdAt
+      })
+      const next = [...current]
+      next.splice(insertAt === -1 ? next.length : insertAt, 0, restored)
+      return next
+    })
+  }, [])
+
   async function handleLogout() {
     try {
       await api.logout()
@@ -356,7 +413,7 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
         <Brand />
         <div className="header-actions">
           <SearchBar value={query} onChange={setQuery} />
-          <ProfileMenu user={user} onLogout={handleLogout} onUserUpdated={onUserUpdated} />
+          <ProfileMenu user={user} onLogout={handleLogout} onUserUpdated={onUserUpdated} onRestore={handleRestoreItem} />
         </div>
       </header>
 
@@ -383,10 +440,11 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
       )}
 
       {loading ? (
-        <div className="empty-state">
-          <div className="empty-icon">⏳</div>
-          <h2>Loading...</h2>
-        </div>
+        <section className="notes-grid" aria-busy="true" aria-label="Loading items">
+          <NoteCardSkeleton />
+          <NoteCardSkeleton />
+          <NoteCardSkeleton />
+        </section>
       ) : (
         <>
           <section className="notes-grid">

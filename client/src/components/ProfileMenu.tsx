@@ -4,39 +4,31 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
-import { LogOut, Settings, User, X } from 'lucide-react'
+import { LogOut, Settings, Trash2, User } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Avatar, AvatarFallback, AvatarImage } from './Avatar'
 import { ManageProfileModal } from './ManageProfileModal'
+import { SettingsModal } from './SettingsModal'
+import { DeletedModal } from './DeletedModal'
+import { initialsOf } from '../lib/utils'
 import type { User as UserType } from '../types/user'
+import type { NoteItem } from '../types/note'
 
 interface ProfileMenuProps {
   user: UserType
   onLogout: () => void
   onUserUpdated: (user: UserType) => void
+  onRestore: (item: NoteItem) => void
 }
 
-/** "Shivam Kumar" -> "SK"; falls back to "?" for empty names. */
-function initialsOf(name: string): string {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-  return initials || '?'
-}
-
-type Placeholder = 'settings' | null
-
-export function ProfileMenu({ user, onLogout, onUserUpdated }: ProfileMenuProps) {
+export function ProfileMenu({ user, onLogout, onUserUpdated, onRestore }: ProfileMenuProps) {
   const [open, setOpen] = useState(false)
-  const [placeholder, setPlaceholder] = useState<Placeholder>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [deletedOpen, setDeletedOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const avatarButtonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const placeholderCloseRef = useRef<HTMLButtonElement>(null)
 
   // Close the menu when clicking outside of it.
   useEffect(() => {
@@ -72,26 +64,35 @@ export function ProfileMenu({ user, onLogout, onUserUpdated }: ProfileMenuProps)
       ?.focus()
   }, [open])
 
-  // Escape closes the placeholder dialog and returns focus to its close button.
+  // Escape closes the settings modal.
   useEffect(() => {
-    if (!placeholder) return
-    placeholderCloseRef.current?.focus()
+    if (!settingsOpen) return
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setPlaceholder(null)
+      if (event.key === 'Escape') closeSettings()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [placeholder])
+  }, [settingsOpen])
 
   // Escape closes the profile modal.
   useEffect(() => {
     if (!profileOpen) return
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setProfileOpen(false)
+      if (event.key === 'Escape') closeProfile()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [profileOpen])
+
+  // Escape closes the deleted modal.
+  useEffect(() => {
+    if (!deletedOpen) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') closeDeleted()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [deletedOpen])
 
   function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
@@ -115,9 +116,32 @@ export function ProfileMenu({ user, onLogout, onUserUpdated }: ProfileMenuProps)
     setProfileOpen(true)
   }
 
-  function openPlaceholder(kind: Exclude<Placeholder, null>) {
+  function openSettings() {
     setOpen(false)
-    setPlaceholder(kind)
+    setSettingsOpen(true)
+  }
+
+  function openDeleted() {
+    setOpen(false)
+    setDeletedOpen(true)
+  }
+
+  // The menu items that opened these modals unmount together with the
+  // dropdown, so the modal's own focus restore has no target — close handlers
+  // return focus to the persistent trigger (the avatar button) instead.
+  function closeSettings() {
+    setSettingsOpen(false)
+    avatarButtonRef.current?.focus()
+  }
+
+  function closeProfile() {
+    setProfileOpen(false)
+    avatarButtonRef.current?.focus()
+  }
+
+  function closeDeleted() {
+    setDeletedOpen(false)
+    avatarButtonRef.current?.focus()
   }
 
   return (
@@ -176,10 +200,18 @@ export function ProfileMenu({ user, onLogout, onUserUpdated }: ProfileMenuProps)
             <button
               className="profile-menu-item"
               role="menuitem"
-              onClick={() => openPlaceholder('settings')}
+              onClick={openSettings}
             >
               <Settings size={18} />
               Settings
+            </button>
+            <button
+              className="profile-menu-item"
+              role="menuitem"
+              onClick={openDeleted}
+            >
+              <Trash2 size={18} />
+              Deleted
             </button>
 
             <div className="profile-dropdown-divider" />
@@ -197,41 +229,7 @@ export function ProfileMenu({ user, onLogout, onUserUpdated }: ProfileMenuProps)
       </AnimatePresence>
 
       <AnimatePresence>
-        {placeholder && (
-          <motion.div
-            className="modal-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) setPlaceholder(null)
-            }}
-          >
-            <motion.div
-              className="placeholder-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Settings"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              transition={{ duration: 0.15 }}
-            >
-              <div className="modal-header">
-                <h2>Settings</h2>
-                <button
-                  ref={placeholderCloseRef}
-                  className="icon-button"
-                  onClick={() => setPlaceholder(null)}
-                  aria-label="Close"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <p className="placeholder-note">Coming soon.</p>
-            </motion.div>
-          </motion.div>
-        )}
+        {settingsOpen && <SettingsModal onClose={closeSettings} />}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -239,8 +237,14 @@ export function ProfileMenu({ user, onLogout, onUserUpdated }: ProfileMenuProps)
           <ManageProfileModal
             user={user}
             onSaved={onUserUpdated}
-            onClose={() => setProfileOpen(false)}
+            onClose={closeProfile}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {deletedOpen && (
+          <DeletedModal onClose={closeDeleted} onRestore={onRestore} />
         )}
       </AnimatePresence>
     </div>

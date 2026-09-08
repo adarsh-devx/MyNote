@@ -2,12 +2,14 @@ import { Router } from 'express'
 import passport from 'passport'
 import { getMe, updateMe, googleCallback, logout } from '../controllers/auth.controller.js'
 import { requireAuth } from '../middleware/auth.js'
+import { authRateLimiter } from '../middleware/rate-limit.js'
 
 const router = Router()
 
 // Start Google OAuth flow
 router.get(
   '/google',
+  authRateLimiter,
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     prompt: 'select_account',
@@ -17,6 +19,7 @@ router.get(
 // Google OAuth callback
 router.get(
   '/google/callback',
+  authRateLimiter,
   passport.authenticate('google', { failureRedirect: '/' }),
   googleCallback,
 )
@@ -28,6 +31,6 @@ router.get('/me', getMe)
 router.patch('/me', requireAuth, updateMe)
 
 // Logout
-router.post('/logout', logout)
+router.post('/logout', authRateLimiter, logout)
 
 export { router as authRouter }

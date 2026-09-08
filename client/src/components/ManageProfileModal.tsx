@@ -2,23 +2,14 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { ArrowLeft, Lock } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Avatar, AvatarFallback, AvatarImage } from './Avatar'
+import { initialsOf } from '../lib/utils'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import type { User } from '../types/user'
 
 interface ManageProfileModalProps {
   user: User
   onSaved: (updated: User) => void
   onClose: () => void
-}
-
-/** "Shivam Kumar" -> "SK" — same logic used by ProfileMenu. */
-function initialsOf(name: string): string {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-  return initials || '?'
 }
 
 export function ManageProfileModal({
@@ -31,6 +22,10 @@ export function ManageProfileModal({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const nameInputRef = useRef<HTMLInputElement>(null)
+
+  // Keeps keyboard focus inside the dialog and restores it to the trigger
+  // when the modal closes.
+  const dialogRef = useFocusTrap<HTMLDivElement>()
 
   // Focus the name input when the modal opens.
   useEffect(() => {
@@ -91,6 +86,7 @@ export function ManageProfileModal({
       }}
     >
       <motion.div
+        ref={dialogRef}
         className="profile-modal"
         role="dialog"
         aria-modal="true"
@@ -123,7 +119,6 @@ export function ManageProfileModal({
             )}
           </Avatar>
           <p className="profile-hero-name">{user.name}</p>
-          <p className="profile-hero-email">{user.email}</p>
         </div>
 
         <div className="profile-divider" />

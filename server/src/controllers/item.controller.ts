@@ -13,6 +13,7 @@ function toItemDTO(item: Item): ItemDTO {
     type: item.type,
     completed: item.completed,
     notificationState: item.notificationState,
+    deletedAt: item.deletedAt?.toISOString() ?? null,
     createdAt: item.createdAt?.toISOString() ?? null,
     updatedAt: item.updatedAt?.toISOString() ?? null,
   }
@@ -68,6 +69,7 @@ export async function updateItem(
   }
 }
 
+/** Soft-delete: mark item as deleted instead of removing it. */
 export async function deleteItem(
   req: Request,
   res: Response,
@@ -81,6 +83,61 @@ export async function deleteItem(
       return
     }
     res.json({ message: 'Item deleted successfully.' })
+  } catch (error) {
+    next(error)
+  }
+}
+
+/** Get all soft-deleted items for the current user. */
+export async function getDeletedItems(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const items = await itemService.getDeletedItems(getCurrentUserId(req))
+    res.json(items.map(toItemDTO))
+  } catch (error) {
+    next(error)
+  }
+}
+
+/** Restore a soft-deleted item. */
+export async function restoreItem(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const itemId = req.params.id as string
+    const item = await itemService.restoreItem(getCurrentUserId(req), itemId)
+    if (!item) {
+      res.status(404).json({ error: 'Item not found.' })
+      return
+    }
+    res.json(toItemDTO(item))
+  } catch (error) {
+    next(error)
+  }
+}
+
+/** Permanently delete an item from the database. */
+export async function permanentDeleteItem(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const itemId = req.params.id as string
+    const deleted = await itemService.permanentDeleteItem(
+      getCurrentUserId(req),
+      itemId,
+    )
+    if (!deleted) {
+      res.status(404).json({ error: 'Item not found.' })
+      return
+    }
+    res.json({ message: 'Item permanently deleted.' })
   } catch (error) {
     next(error)
   }

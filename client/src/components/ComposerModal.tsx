@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { useFocusTrap } from '../hooks/useFocusTrap'
 import type { ItemType } from '../types/note'
 
 interface ComposerModalProps {
@@ -23,6 +24,10 @@ export function ComposerModal({
   const [type, setType] = useState<ItemType>(initialType)
   const [title, setTitle] = useState(initialTitle)
   const [content, setContent] = useState(initialContent)
+
+  // Keeps keyboard focus inside the dialog and restores it to the trigger
+  // (e.g. the Create button) when the composer closes.
+  const dialogRef = useFocusTrap<HTMLFormElement>()
 
   // Guards the optimistic create submit against a fast double-click: after the
   // first submit the optimistic item is already on screen, so a second submit
@@ -65,7 +70,11 @@ export function ComposerModal({
       role="presentation"
     >
       <motion.form
+        ref={dialogRef}
         className="composer-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="composer-modal-title"
         initial={{ opacity: 0, y: 18, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 18, scale: 0.98 }}
@@ -75,7 +84,9 @@ export function ComposerModal({
         <div className="modal-header">
           <div>
             <span className="eyebrow">{editMode ? 'edit' : 'new'}</span>
-            <h2>{editMode ? 'Update your entry.' : 'Put it somewhere.'}</h2>
+            <h2 id="composer-modal-title">
+              {editMode ? 'Update your entry.' : 'Put it somewhere.'}
+            </h2>
           </div>
           <button
             type="button"
@@ -104,7 +115,11 @@ export function ComposerModal({
           </button>
         </div>
 
+        <label htmlFor="composer-title" className="visually-hidden">
+          Title
+        </label>
         <input
+          id="composer-title"
           className="title-input"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
@@ -112,7 +127,11 @@ export function ComposerModal({
           autoFocus
           maxLength={200}
         />
+        <label htmlFor="composer-content" className="visually-hidden">
+          Content
+        </label>
         <textarea
+          id="composer-content"
           value={content}
           onChange={(event) => setContent(event.target.value)}
           placeholder="Write whatever you don't want to forget..."

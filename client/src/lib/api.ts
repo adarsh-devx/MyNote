@@ -68,9 +68,21 @@ export function updateItem(
 }
 
 export function deleteItem(id: string): Promise<void> {
-  // Deleting an already-deleted item (404) achieves the desired final state, so
-  // treat 404 as success instead of an error.
+  // Soft-delete: the item moves to Deleted, not permanently removed.
+  // A 404 means it was already deleted — same final state.
   return request<void>(`/items/${id}`, { method: 'DELETE' }, [404])
+}
+
+export function getDeletedItems(): Promise<NoteItem[]> {
+  return request<NoteItem[]>('/items/deleted')
+}
+
+export function restoreItem(id: string): Promise<NoteItem> {
+  return request<NoteItem>(`/items/${id}/restore`, { method: 'PATCH' })
+}
+
+export function permanentDeleteItem(id: string): Promise<void> {
+  return request<void>(`/items/${id}/permanent`, { method: 'DELETE' }, [404])
 }
 
 // Auth functions
