@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 interface AvatarProps {
   children: ReactNode
-  size?: 'md' | 'sm'
+  size?: 'md' | 'sm' | 'lg'
 }
 
 export function Avatar({ children, size = 'md' }: AvatarProps) {

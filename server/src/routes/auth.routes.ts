@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import passport from 'passport'
-import { getMe, googleCallback, logout } from '../controllers/auth.controller.js'
+import { getMe, updateMe, googleCallback, logout } from '../controllers/auth.controller.js'
+import { requireAuth } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -22,6 +23,9 @@ router.get(
 
 // Get current user
 router.get('/me', getMe)
+
+// Update current user profile
+router.patch('/me', requireAuth, updateMe)
 
 // Logout
 router.post('/logout', logout)

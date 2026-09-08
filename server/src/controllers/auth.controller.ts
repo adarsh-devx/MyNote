@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express'
 import { env } from '../config/env.js'
+import type { AuthenticatedRequest, AuthUserDTO } from '../types/auth.js'
 import type { UserDocument } from '../models/User.js'
 import * as authService from '../services/auth.service.js'
-import type { AuthUserDTO } from '../types/auth.js'
 
 /** Map a user document to the exact GET /api/auth/me response shape used since Phase 3. */
 function toAuthUserDTO(user: UserDocument): AuthUserDTO {
@@ -49,6 +49,34 @@ export async function getMe(req: Request, res: Response): Promise<void> {
       res.status(401).json({ error: 'User not found' })
       return
     }
+    res.json(toAuthUserDTO(user))
+  } catch {
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+/** PATCH /api/auth/me — update the authenticated user's display name. */
+export async function updateMe(req: Request, res: Response): Promise<void> {
+  const { userId } = req as AuthenticatedRequest
+
+  try {
+    const { name } = (req.body ?? {}) as Record<string, unknown>
+
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).json({ error: 'Name must be a non-empty string.' })
+      return
+    }
+    if (name.trim().length > 100) {
+      res.status(400).json({ error: 'Name must be 100 characters or less.' })
+      return
+    }
+
+    const user = await authService.updateUserProfile(userId, { name: name.trim() })
+    if (!user) {
+      res.status(404).json({ error: 'User not found.' })
+      return
+    }
+
     res.json(toAuthUserDTO(user))
   } catch {
     res.status(500).json({ error: 'Internal server error' })

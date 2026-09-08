@@ -7,11 +7,13 @@ import {
 import { LogOut, Settings, User, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Avatar, AvatarFallback, AvatarImage } from './Avatar'
+import { ManageProfileModal } from './ManageProfileModal'
 import type { User as UserType } from '../types/user'
 
 interface ProfileMenuProps {
   user: UserType
   onLogout: () => void
+  onUserUpdated: (user: UserType) => void
 }
 
 /** "Shivam Kumar" -> "SK"; falls back to "?" for empty names. */
@@ -25,11 +27,12 @@ function initialsOf(name: string): string {
   return initials || '?'
 }
 
-type Placeholder = 'profile' | 'settings' | null
+type Placeholder = 'settings' | null
 
-export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
+export function ProfileMenu({ user, onLogout, onUserUpdated }: ProfileMenuProps) {
   const [open, setOpen] = useState(false)
   const [placeholder, setPlaceholder] = useState<Placeholder>(null)
+  const [profileOpen, setProfileOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const avatarButtonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -80,6 +83,16 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [placeholder])
 
+  // Escape closes the profile modal.
+  useEffect(() => {
+    if (!profileOpen) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setProfileOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [profileOpen])
+
   function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
     event.preventDefault()
@@ -95,6 +108,11 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
         ? (current + 1) % items.length
         : (current - 1 + items.length) % items.length
     items[next]?.focus()
+  }
+
+  function openProfile() {
+    setOpen(false)
+    setProfileOpen(true)
   }
 
   function openPlaceholder(kind: Exclude<Placeholder, null>) {
@@ -150,7 +168,7 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
             <button
               className="profile-menu-item"
               role="menuitem"
-              onClick={() => openPlaceholder('profile')}
+              onClick={openProfile}
             >
               <User size={18} />
               Manage Profile
@@ -193,18 +211,14 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
               className="placeholder-modal"
               role="dialog"
               aria-modal="true"
-              aria-label={
-                placeholder === 'profile' ? 'Manage Profile' : 'Settings'
-              }
+              aria-label="Settings"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 12 }}
               transition={{ duration: 0.15 }}
             >
               <div className="modal-header">
-                <h2>
-                  {placeholder === 'profile' ? 'Manage Profile' : 'Settings'}
-                </h2>
+                <h2>Settings</h2>
                 <button
                   ref={placeholderCloseRef}
                   className="icon-button"
@@ -217,6 +231,16 @@ export function ProfileMenu({ user, onLogout }: ProfileMenuProps) {
               <p className="placeholder-note">Coming soon.</p>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {profileOpen && (
+          <ManageProfileModal
+            user={user}
+            onSaved={onUserUpdated}
+            onClose={() => setProfileOpen(false)}
+          />
         )}
       </AnimatePresence>
     </div>

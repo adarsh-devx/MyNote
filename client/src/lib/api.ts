@@ -78,6 +78,13 @@ export function getCurrentUser(): Promise<User> {
   return request<User>('/auth/me')
 }
 
+export function updateProfile(name: string): Promise<User> {
+  return request<User>('/auth/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  })
+}
+
 export function logout(): Promise<void> {
   return request<void>('/auth/logout', { method: 'POST' })
 }

@@ -60,6 +60,7 @@ export default function App() {
           stopNotificationPolling()
           setUser(null)
         }}
+        onUserUpdated={(updated) => setUser(updated)}
       />
       <OfflineIndicator />
     </>

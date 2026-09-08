@@ -14,6 +14,7 @@ import type { User } from '../types/user'
 interface HomeProps {
   user: User
   onLogout: () => void
+  onUserUpdated: (user: User) => void
 }
 
 const TEMP_ID_PREFIX = 'temp-'
@@ -28,7 +29,7 @@ function isTempId(id: string): boolean {
   return id.startsWith(TEMP_ID_PREFIX)
 }
 
-export function Home({ user, onLogout }: HomeProps) {
+export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   const [items, setItems] = useState<NoteItem[]>([])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ItemFilter>('all')
@@ -355,7 +356,7 @@ export function Home({ user, onLogout }: HomeProps) {
         <Brand />
         <div className="header-actions">
           <SearchBar value={query} onChange={setQuery} />
-          <ProfileMenu user={user} onLogout={handleLogout} />
+          <ProfileMenu user={user} onLogout={handleLogout} onUserUpdated={onUserUpdated} />
         </div>
       </header>
 
