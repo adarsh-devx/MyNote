@@ -6,6 +6,42 @@ use tauri::{
 
 use tauri_plugin_autostart::ManagerExt;
 
+/// The AUMID (Application User Model ID) Windows uses to identify MyNotes
+/// for toast notifications. Must match the `identifier` in tauri.conf.json.
+const AUMID: &str = "com.mynotes.app";
+
+/// Register the AUMID in the Windows Registry so that WinRT toast
+/// notifications work for this unpackaged desktop app. Without this,
+/// `ToastNotificationManager::CreateToastNotifierWithId` creates a notifier
+/// for an identity Windows doesn't recognise, and toasts are silently
+/// suppressed.
+///
+/// Reference: https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/send-local-toast-other-apps
+#[cfg(target_os = "windows")]
+fn register_aumid() {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    let path = format!("SOFTWARE\\Classes\\AppUserModelId\\{AUMID}");
+    if let Ok((key, _)) = hkcu.create_subkey_with_flags(&path, KEY_WRITE) {
+        let _ = key.set_value("DisplayName", &"MyNotes");
+        let _ = key.set_value("IconBackgroundColor", &"0");
+    }
+
+    // Set the process-level AUMID so Windows associates toast notifications
+    // with this app even when the Start Menu shortcut lacks the property.
+    #[link(name = "shell32")]
+    extern "system" {
+        fn SetCurrentProcessExplicitAppUserModelID(appid: *const u16) -> i32;
+    }
+    let wide: Vec<u16> = AUMID.encode_utf16().chain(std::iter::once(0)).collect();
+    let _ = unsafe { SetCurrentProcessExplicitAppUserModelID(wide.as_ptr()) };
+}
+
+#[cfg(not(target_os = "windows"))]
+fn register_aumid() {}
+
 /// Argument the autostart plugin registers in the Windows Run key. When the
 /// process is launched with this flag, it was started by Windows at logon and
 /// should run hidden in the tray instead of popping a window.
@@ -46,6 +82,10 @@ pub fn run() {
             show_main_window(app);
         }))
         .setup(|app| {
+            // Register the AUMID so Windows recognises MyNotes for toast
+            // notifications. This is a no-op on non-Windows platforms.
+            register_aumid();
+
             // MyNotes is a background-first app: keep autostart enabled so
             // notifications arrive after every Windows restart.
             let autolaunch = app.autolaunch();
