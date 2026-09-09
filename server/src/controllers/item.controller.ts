@@ -16,6 +16,11 @@ function toItemDTO(item: Item): ItemDTO {
     deletedAt: item.deletedAt?.toISOString() ?? null,
     createdAt: item.createdAt?.toISOString() ?? null,
     updatedAt: item.updatedAt?.toISOString() ?? null,
+    // Echoed only when present (offline-first Phase 2 idempotent create);
+    // legacy documents lack the field, so legacy responses are unchanged.
+    ...(item.clientRequestId !== undefined
+      ? { clientRequestId: item.clientRequestId }
+      : {}),
   }
 }
 

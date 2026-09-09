@@ -23,6 +23,7 @@ MyNotes is a personal notes and tasks app designed for quick capture on your pho
 - **Autostart** — optionally runs hidden in the tray at Windows login
 - **Single-instance** — launching it twice focuses the existing window
 - **Optimistic UI** — create, edit, toggle, delete, and restore feel instant
+- **Offline-first** — works without internet; local-first mutations via IndexedDB, background sync queue, automatic reconciliation when online
 
 ## Screenshots
 
@@ -36,6 +37,7 @@ MyNotes is a personal notes and tasks app designed for quick capture on your pho
 - Framer Motion
 - Lucide React icons
 - vite-plugin-pwa
+- Fontsource (self-hosted fonts: Caveat, Inter)
 
 **Backend**
 - Node.js + Express + TypeScript
@@ -56,7 +58,7 @@ Desktop:      Tauri (WebView2) →  React        →  Express API  →  MongoDB
 Auth:         Google OAuth     →  server-side session  →  MongoDB session store
 ```
 
-The Express API is the source of truth: every item query is scoped server-side to the authenticated user, and the client never supplies user identity. The frontend applies optimistic updates for instant feedback and reconciles with the server response — there is currently **no offline sync**; an internet connection is required.
+The Express API is the source of truth: every item query is scoped server-side to the authenticated user, and the client never supplies user identity. The frontend applies optimistic updates for instant feedback, persists mutations to a local IndexedDB sync queue, and reconciles with the server in the background. **Offline-first**: the app works without internet — local mutations are durable and automatically synced when connectivity returns. Previously synced notes/tasks are visible offline, and all mutations (create/edit/toggle/delete/restore) work offline.
 
 ## Getting Started
 
@@ -122,6 +124,7 @@ Copy the provided examples and fill in real values — never commit them.
 | `PORT` | Port the API server listens on (default `5000`) |
 | `MONGODB_URI` | MongoDB connection string (required) |
 | `CLIENT_URL` | Frontend origin, used for CORS and post-login redirect |
+| `ALLOWED_ORIGINS` | Comma-separated allowed origins for CORS and OAuth redirect (optional, defaults to CLIENT_URL + Tauri origins) |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID (required) |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret (required) |
 | `GOOGLE_CALLBACK_URL` | Full OAuth callback URL (required) |
@@ -183,8 +186,9 @@ MyNotes/
 │   ├── src/
 │   │   ├── components/      # UI components (cards, modals, search, profile…)
 │   │   ├── pages/           # Home, Login
-│   │   ├── hooks/           # useFocusTrap
-│   │   ├── lib/             # API client, notification polling, utilities
+│   │   ├── hooks/           # useFocusTrap, useSyncStatus
+│   │   ├── lib/             # API client, notification polling, utilities,
+│   │   │                    # offline-first (db, store, syncEngine, authCache)
 │   │   ├── types/           # Shared TypeScript types
 │   │   └── styles.css       # Design system
 │   ├── src-tauri/           # Tauri 2 desktop shell (Rust)
@@ -206,10 +210,12 @@ MyNotes/
 
 Honest ideas, not promises:
 
-- Offline-first sync (local queue, background reconciliation)
 - Better long-note presentation
 - More granular notification controls
 - Additional themes (dark mode)
+- Browser notification support (currently Tauri-only)
+- Real-time cross-device sync (currently polling-based, ~20s latency)
+- Auto-purge of old trash items
 
 ## License
 

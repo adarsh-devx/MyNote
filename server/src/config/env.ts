@@ -24,7 +24,13 @@ export const env = {
   },
 
   /**
-   * CORS allowlist for credentialed requests.
+   * CORS allowlist for credentialed requests AND OAuth origin capture.
+   *
+   * Populated from ALLOWED_ORIGINS (comma-separated) if set, otherwise
+   * derived from CLIENT_URL. Always includes Tauri webview origins.
+   *
+   * For Vite preview testing on localhost:4173, set:
+   *   ALLOWED_ORIGINS=http://localhost:4173,http://localhost:5173
    *
    * Must include BOTH the hosted web client and the Tauri desktop webview
    * origins. The bundled desktop frontend is served from http://tauri.localhost
@@ -35,9 +41,19 @@ export const env = {
    */
   get allowedOrigins(): string[] {
     const origins = new Set<string>()
-    if (this.clientUrl) {
+
+    // ALLOWED_ORIGINS takes precedence when explicitly set.
+    const raw = process.env.ALLOWED_ORIGINS
+    if (raw) {
+      for (const origin of raw.split(',')) {
+        const trimmed = origin.trim().replace(/\/+$/, '')
+        if (trimmed) origins.add(trimmed)
+      }
+    } else if (this.clientUrl) {
+      // Fallback: derive from CLIENT_URL.
       origins.add(this.clientUrl.replace(/\/+$/, ''))
     }
+
     // Tauri v2 webview origins across platforms (Windows serves the bundled
     // frontend from http://tauri.localhost).
     origins.add('http://tauri.localhost')

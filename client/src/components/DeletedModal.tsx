@@ -3,7 +3,20 @@ import { ArrowLeft, Trash2, RotateCcw } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFocusTrap } from '../hooks/useFocusTrap'
 import * as api from '../lib/api'
+import { cacheDeletedItems, loadCachedDeletedItems } from '../lib/authCache'
+import {
+  permanentDeleteItemLocalFirst,
+  restoreItemLocalFirst,
+} from '../lib/store'
 import type { NoteItem } from '../types/note'
+
+// Best-effort connectivity probe, mirroring OfflineIndicator: navigator.onLine
+// is false only when the browser is certain there is no network route. It
+// cannot prove the server is reachable, but it is the correct gate for
+// choosing between the cached trash read and the authoritative API fetch.
+function isOnline(): boolean {
+  return typeof navigator === 'undefined' || navigator.onLine !== false
+}
 
 interface DeletedModalProps {
   onClose: () => void
@@ -35,18 +48,41 @@ export function DeletedModal({ onClose, onRestore }: DeletedModalProps) {
 
   useEffect(() => {
     let cancelled = false
-    api
-      .getDeletedItems()
-      .then((data) => {
-        if (!cancelled) setItems(data)
-      })
-      .catch((err) => {
-        if (!cancelled)
+
+    async function load() {
+      // OFFLINE: serve the cached trash snapshot (previously synced deleted
+      // items, newest deletion first) without waiting for a request that
+      // cannot succeed. ONLINE: the server remains authoritative — fetch,
+      // then mirror the response into the cache for the next offline open.
+      if (!isOnline()) {
+        const cached = await loadCachedDeletedItems()
+        if (!cancelled) setItems(cached)
+        setLoading(false)
+        return
+      }
+
+      try {
+        const data = await api.getDeletedItems()
+        if (cancelled) return
+        setItems(data)
+        void cacheDeletedItems(data)
+      } catch (err) {
+        if (cancelled) return
+        // Reachable but the request failed (server error, rate limit):
+        // fall back to the cached trash so the modal stays useful, and
+        // surface the failure exactly as before. With no cache (or an empty
+        // one) the previous error-only behavior is preserved.
+        const cached = await loadCachedDeletedItems()
+        if (!cancelled) {
+          if (cached.length > 0) setItems(cached)
           setError(err instanceof Error ? err.message : 'Failed to load.')
-      })
-      .finally(() => {
+        }
+      } finally {
         if (!cancelled) setLoading(false)
-      })
+      }
+    }
+
+    void load()
     return () => {
       cancelled = true
     }
@@ -82,16 +118,21 @@ export function DeletedModal({ onClose, onRestore }: DeletedModalProps) {
 
   const handleRestore = useCallback(
     async (id: string) => {
-      // Optimistic: remove from deleted list immediately.
+      // Local-first: the restore is applied to the durable store immediately
+      // and the RESTORE op is queued; the background drain reaches the server.
+      // The optimistic list removal below is preserved for the UI.
       const previous = items
       setItems((current) => current.filter((item) => item.id !== id))
       setConfirmDelete(null)
 
       try {
-        const restored = await api.restoreItem(id)
-        onRestore(restored)
+        const restored = await restoreItemLocalFirst(id)
+        if (restored) {
+          onRestore(restored)
+          setError(null)
+        }
       } catch {
-        // Rollback on failure.
+        // Only an IndexedDB failure reaches here — roll back the list.
         setItems(previous)
         setError('Failed to restore item.')
       }
@@ -101,15 +142,17 @@ export function DeletedModal({ onClose, onRestore }: DeletedModalProps) {
 
   const handlePermanentDelete = useCallback(
     async (id: string) => {
-      // Optimistic: remove from deleted list immediately.
+      // Local-first permanent delete: the record is removed and the
+      // PERMANENT-DELETE op is queued in one transaction (or a still-pending
+      // CREATE is cancelled so no server request is ever generated).
       const previous = items
       setItems((current) => current.filter((item) => item.id !== id))
       setConfirmDelete(null)
 
       try {
-        await api.permanentDeleteItem(id)
+        await permanentDeleteItemLocalFirst(id)
       } catch {
-        // Rollback on failure.
+        // Only an IndexedDB failure reaches here — roll back the list.
         setItems(previous)
         setError('Failed to delete item.')
       }

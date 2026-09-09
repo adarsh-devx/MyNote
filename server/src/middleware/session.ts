@@ -8,6 +8,7 @@ declare module 'express-session' {
   }
 }
 
+
 export function createSessionMiddleware(mongoUri: string) {
   return session({
     secret: env.sessionSecret,

@@ -15,15 +15,65 @@ export async function createItem(
   userId: string,
   data: CreateItemInput,
 ): Promise<ItemDocument> {
-  return ItemModel.create({
-    userId,
-    title: data.title,
-    content: data.content,
-    type: data.type,
-    completed: false,
-    notificationState: 'pending',
-    deletedAt: null,
-  })
+  // Idempotent create (offline-first Phase 2): when the client supplies a
+  // clientRequestId, a retried or lost-response create must return the
+  // ORIGINAL item instead of duplicating it. The lookup is always scoped by
+  // the server-derived userId — the uniqueness boundary is
+  // (userId, clientRequestId), never clientRequestId alone, so two users
+  // may use the same key for two different items.
+  if (data.clientRequestId !== undefined) {
+    const existing = await ItemModel.findOne({
+      userId,
+      clientRequestId: data.clientRequestId,
+    })
+    if (existing) {
+      return existing
+    }
+  }
+
+  try {
+    return await ItemModel.create({
+      userId,
+      title: data.title,
+      content: data.content,
+      type: data.type,
+      completed: false,
+      notificationState: 'pending',
+      deletedAt: null,
+      // Omitted entirely when absent — existing/legacy documents must keep
+      // lacking the field so the sparse unique index never sees them.
+      ...(data.clientRequestId !== undefined
+        ? { clientRequestId: data.clientRequestId }
+        : {}),
+    })
+  } catch (error) {
+    // Race: two identical creates arriving concurrently — the sparse unique
+    // index { userId, clientRequestId } lets exactly one insert win and
+    // rejects the loser with a duplicate-key error (code 11000). The loser
+    // re-queries and returns the winner; no error is surfaced to either
+    // caller. Any other failure (or a 11000 whose re-query finds nothing —
+    // i.e. not from this index) is rethrown unchanged.
+    if (data.clientRequestId !== undefined && isDuplicateKeyError(error)) {
+      const winner = await ItemModel.findOne({
+        userId,
+        clientRequestId: data.clientRequestId,
+      })
+      if (winner) {
+        return winner
+      }
+    }
+    throw error
+  }
+}
+
+/** True when the error is a MongoDB duplicate-key violation (code 11000). */
+function isDuplicateKeyError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 11000
+  )
 }
 
 export async function updateItem(

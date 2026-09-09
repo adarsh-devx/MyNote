@@ -12,6 +12,12 @@ export interface Item {
   deletedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  /**
+   * Optional client-generated idempotency key for CREATE (offline-first
+   * Phase 2). Existing documents never have this field; it must stay absent
+   * (NOT null) so the sparse unique index ignores them.
+   */
+  clientRequestId?: string
 }
 
 const itemSchema = new Schema<Item>(
@@ -54,6 +60,14 @@ const itemSchema = new Schema<Item>(
       type: Date,
       default: null,
     },
+    clientRequestId: {
+      // Idempotency key for offline create replay. No default on purpose:
+      // documents without one must LACK the field entirely — a null value
+      // would be indexed by the sparse index below and two legacy creates
+      // for the same user would collide on (userId, null).
+      type: String,
+      maxlength: 100,
+    },
   },
   {
     timestamps: true,
@@ -62,6 +76,10 @@ const itemSchema = new Schema<Item>(
 
 itemSchema.index({ userId: 1, createdAt: -1 })
 itemSchema.index({ userId: 1, deletedAt: 1 })
+// Idempotent-create protection (offline-first Phase 2): unique per user, and
+// sparse so the many existing documents without clientRequestId are excluded
+// from the index and keep working unchanged.
+itemSchema.index({ userId: 1, clientRequestId: 1 }, { unique: true, sparse: true })
 
 export type ItemDocument = HydratedDocument<Item>
 export const ItemModel = model<Item>('Item', itemSchema)

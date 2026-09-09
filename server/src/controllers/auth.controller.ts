@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { env } from '../config/env.js'
+import { OAUTH_ORIGIN_COOKIE } from '../routes/auth.routes.js'
 import type { AuthenticatedRequest, AuthUserDTO } from '../types/auth.js'
 import type { UserDocument } from '../models/User.js'
 import * as authService from '../services/auth.service.js'
@@ -17,17 +18,53 @@ function toAuthUserDTO(user: UserDocument): AuthUserDTO {
 /**
  * Google OAuth callback (runs after passport.authenticate succeeded).
  * Establishes the server-side session, then redirects to the client.
+ *
+ * The redirect target is read from the short-lived `oauth_origin` cookie that
+ * was set at the start of the flow in captureClientOrigin (auth.routes.ts).
+ * Using a plain cookie (rather than the session) is necessary because Passport
+ * calls req.session.regenerate() on login, which creates a new session ID and
+ * discards all data from the pre-login session. Plain cookies are unaffected
+ * by session regeneration.
+ *
+ * Falls back to env.clientUrl when the cookie is absent or invalid.
  */
 export function googleCallback(req: Request, res: Response): void {
   if (req.user) {
     req.session.userId = (req.user as { _id: { toString(): string } })._id.toString()
+    // Read and immediately clear the short-lived oauth_origin cookie, then
+    // validate it against the allowlist a second time before redirecting.
+    const redirectTarget = resolveOAuthRedirectTarget(req, res)
     req.session.save(() => {
-      res.redirect(env.clientUrl)
+      res.redirect(redirectTarget)
     })
   } else {
     res.redirect('/')
   }
 }
+
+/**
+ * Read and clear the oauth_origin cookie, validate it against the allowlist,
+ * and return the safe redirect target. Falls back to env.clientUrl.
+ */
+function resolveOAuthRedirectTarget(req: Request, res: Response): string {
+  const raw: unknown = (req.cookies as Record<string, unknown>)?.[OAUTH_ORIGIN_COOKIE]
+  res.clearCookie(OAUTH_ORIGIN_COOKIE, { path: '/' })
+
+  if (typeof raw === 'string' && raw) {
+    try {
+      const url = new URL(raw)
+      const candidate = `${url.protocol}//${url.host}`
+      const allowedOrigins = env.allowedOrigins.map((o) => o.toLowerCase())
+      if (allowedOrigins.includes(candidate.toLowerCase())) {
+        return candidate
+      }
+    } catch {
+      // Malformed — fall through to default.
+    }
+  }
+  return env.clientUrl
+}
+
 
 /**
  * GET /api/auth/me

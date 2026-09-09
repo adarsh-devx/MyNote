@@ -9,6 +9,7 @@ try {
 }
 import cors from 'cors'
 import express from 'express'
+import cookieParser from 'cookie-parser'
 import passport from 'passport'
 import { connectDatabase } from './db/connect.js'
 import { configurePassport } from './config/passport.js'
@@ -42,6 +43,10 @@ app.use(
 )
 
 app.use(express.json({ limit: '100kb' }))
+
+// Parse plain cookies (needed for the oauth_origin cookie used in the OAuth
+// redirect-target flow — express-session only parses connect.sid itself).
+app.use(cookieParser())
 
 // Session middleware (throws early if MONGODB_URI / SESSION_SECRET are not set)
 app.use(createSessionMiddleware(env.mongoUri))

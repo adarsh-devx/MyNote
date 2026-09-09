@@ -24,40 +24,41 @@
 14. [REST API](#14-rest-api)
 15. [Validation](#15-validation)
 16. [Rate Limiting](#16-rate-limiting)
-17. [Optimistic UI](#17-optimistic-ui)
-18. [Race Condition Handling](#18-race-condition-handling)
-19. [Trash / Soft Delete](#19-trash--soft-delete)
-20. [Notification System](#20-notification-system)
-21. [Notification Retry / Backoff](#21-notification-retry--backoff)
-22. [Tauri Architecture](#22-tauri-architecture)
-23. [Windows Notifications](#23-windows-notifications)
-24. [System Tray](#24-system-tray)
-25. [Autostart](#25-autostart)
-26. [Single Instance](#26-single-instance)
-27. [PWA Architecture](#27-pwa-architecture)
-28. [Tauri vs PWA Build](#28-tauri-vs-pwa-build)
-29. [Build and Packaging](#29-build-and-packaging)
-30. [Environment Configuration](#30-environment-configuration)
-31. [CORS](#31-cors)
-32. [Security Architecture](#32-security-architecture)
-33. [Performance](#33-performance)
-34. [Accessibility](#34-accessibility)
-35. [Responsive Design](#35-responsive-design)
-36. [Error Handling](#36-error-handling)
-37. [Important Design Decisions](#37-important-design-decisions)
-38. [Why Not JWT?](#38-why-not-jwt)
-39. [Why Polling Instead of WebSockets?](#39-why-polling-instead-of-websockets)
-40. [Known Limitations](#40-known-limitations)
-41. [Future Roadmap](#41-future-roadmap)
-42. [Troubleshooting](#42-troubleshooting)
-43. [Interview Questions](#43-interview-questions)
-44. [File-by-File Logic Map](#44-file-by-file-logic-map)
-45. [End-to-End Request Examples](#45-end-to-end-request-examples)
-46. [Data Flow vs Control Flow](#46-data-flow-vs-control-flow)
-47. [Project Strengths](#47-project-strengths)
-48. [Tradeoffs](#48-tradeoffs)
-49. [Release Information](#49-release-information)
-50. [Final Summary](#50-final-summary)
+17. [Offline-First Architecture](#17-offline-first-architecture-phase-0-6)
+18. [Optimistic UI](#18-optimistic-ui)
+19. [Race Condition Handling](#19-race-condition-handling)
+20. [Trash / Soft Delete](#20-trash--soft-delete)
+21. [Notification System](#21-notification-system)
+22. [Notification Retry / Backoff](#22-notification-retry--backoff)
+23. [Tauri Architecture](#23-tauri-architecture)
+24. [Windows Notifications](#24-windows-notifications)
+25. [System Tray](#25-system-tray)
+26. [Autostart](#26-autostart)
+27. [Single Instance](#27-single-instance)
+28. [PWA Architecture](#28-pwa-architecture)
+29. [Tauri vs PWA Build](#29-tauri-vs-pwa-build)
+30. [Build and Packaging](#30-build-and-packaging)
+31. [Environment Configuration](#31-environment-configuration)
+32. [CORS](#32-cors)
+33. [Security Architecture](#33-security-architecture)
+34. [Performance](#34-performance)
+35. [Accessibility](#35-accessibility)
+36. [Responsive Design](#36-responsive-design)
+37. [Error Handling](#37-error-handling)
+38. [Important Design Decisions](#38-important-design-decisions)
+39. [Why Not JWT?](#39-why-not-jwt)
+40. [Why Polling Instead of WebSockets?](#40-why-polling-instead-of-websockets)
+41. [Known Limitations](#41-known-limitations)
+42. [Future Roadmap](#42-future-roadmap)
+43. [Troubleshooting](#43-troubleshooting)
+44. [Interview Questions](#44-interview-questions)
+45. [File-by-File Logic Map](#45-file-by-file-logic-map)
+46. [End-to-End Request Examples](#46-end-to-end-request-examples)
+47. [Data Flow vs Control Flow](#47-data-flow-vs-control-flow)
+48. [Project Strengths](#48-project-strengths)
+49. [Tradeoffs](#49-tradeoffs)
+50. [Release Information](#50-release-information)
+51. [Final Summary](#51-final-summary)
 
 ---
 
@@ -97,7 +98,6 @@ Phone capture  →  Cloud sync  →  PC access
 - **Not Jira/Trello** — no boards, sprints, assignments, or workflows
 - **Not Notion** — no databases, nesting, or rich documents
 - **Not a collaboration platform** — no sharing, teams, mentions, or comments
-- **Not offline-first** — an internet connection is required; there is no local sync queue (see [§40 Known Limitations](#40-known-limitations))
 
 ### Current release version
 
@@ -137,19 +137,19 @@ Each feature below documents **WHAT** it does, **WHY** it exists, and **HOW** it
 
 - **WHAT:** A "＋ Write something..." trigger opens `ComposerModal`; saving adds the item.
 - **WHY:** The primary capture path.
-- **HOW:** Optimistic — see [§17](#17-optimistic-ui). A temp-ID item is prepended, the POST runs in background, the server item replaces the temp item.
+- **HOW:** Optimistic — see [§18](#18-optimistic-ui). A temp-ID item is prepended, the POST runs in background, the server item replaces the temp item.
 
 ### Edit
 
 - **WHAT:** The pencil button on each card opens the composer pre-filled; saving updates the card instantly.
 - **WHY:** Fixing typos should not feel slower than creating.
-- **HOW:** Optimistic PATCH with `editVersions` race protection — see [§17](#17-optimistic-ui) and [§18](#18-race-condition-handling).
+- **HOW:** Optimistic PATCH with `editVersions` race protection — see [§18](#18-optimistic-ui) and [§19](#19-race-condition-handling).
 
 ### Delete / Trash / Restore / Permanent delete
 
 - **WHAT:** Delete moves an item to a Trash; restore brings it back; "Delete forever" removes it from the database.
 - **WHY:** Accidental deletes should be recoverable without a confirmation dialog on every delete.
-- **HOW:** Soft delete via `deletedAt` — see [§19](#19-trash--soft-delete).
+- **HOW:** Soft delete via `deletedAt` — see [§20](#20-trash--soft-delete).
 
 ### Google login
 
@@ -173,28 +173,34 @@ Each feature below documents **WHAT** it does, **WHY** it exists, and **HOW** it
 
 - **WHAT:** Generic Windows toasts ("You have a new task." / "You have new tasks.") when tasks are created from another device while the app is in the background.
 - **WHY:** The phone→PC workflow's endpoint.
-- **HOW:** Chained 20s polling + WinRT toasts — see [§20](#20-notification-system) and [§23](#23-windows-notifications).
+- **HOW:** Chained 20s polling + WinRT toasts — see [§21](#21-notification-system) and [§24](#24-windows-notifications).
 
 ### PWA
 
 - **WHAT:** The web build is installable and runs standalone.
-- **HOW:** vite-plugin-pwa with `autoUpdate`, precached static assets, no API caching — see [§27](#27-pwa-architecture).
+- **HOW:** vite-plugin-pwa with `autoUpdate`, precached static assets, no API caching — see [§28](#28-pwa-architecture).
 
 ### Windows desktop app
 
 - **WHAT:** A native NSIS/MSI installer wrapping the same UI in a WebView2 shell with tray, notifications, autostart, and single-instance behavior.
-- **HOW:** Tauri 2 — see [§22](#22-tauri-architecture).
+- **HOW:** Tauri 2 — see [§23](#23-tauri-architecture).
 
 ### Optimistic UI
 
 - **WHAT:** All five mutations (create/edit/toggle/delete/restore) update the screen immediately and reconcile in the background.
 - **WHY:** Perceived latency drops to zero.
-- **HOW:** See [§17](#17-optimistic-ui).
+- **HOW:** See [§18](#18-optimistic-ui).
 
 ### Responsive UI & skeleton loading
 
 - **WHAT:** The layout adapts from 320px phones to wide desktops; the initial item fetch shows three shimmering skeleton cards instead of a spinner.
-- **HOW:** CSS-only — see [§6](#6-styling--ui-architecture) and [§35](#35-responsive-design).
+- **HOW:** CSS-only — see [§6](#6-styling--ui-architecture) and [§36](#36-responsive-design).
+
+### Offline-first
+
+- **WHAT:** MyNotes works without internet. Previously synced notes/tasks are visible offline. Creating, editing, completing, deleting, restoring, and permanently deleting items all work offline. Changes are queued locally and automatically synced when connectivity returns.
+- **WHY:** The core use case is capturing thoughts on the go — internet isn't always available.
+- **HOW:** IndexedDB mirrors server data; a durable sync queue stores local mutations; the sync engine replays them against the server in the background (see [§17](#17-offline-first-architecture-phase-0-6)).
 
 ---
 
@@ -251,10 +257,12 @@ Each feature below documents **WHAT** it does, **WHY** it exists, and **HOW** it
 MyNotes/
 ├── client/                       # Frontend + desktop shell
 │   ├── src/
-│   │   ├── components/           # All UI components (13 files)
+│   │   ├── components/           # All UI components (14 files)
 │   │   ├── pages/                # Home.tsx (authenticated), Login.tsx
-│   │   ├── hooks/                # useFocusTrap.ts
-│   │   ├── lib/                  # api.ts, notifications.ts, utils.ts
+│   │   ├── hooks/                # useFocusTrap.ts, useSyncStatus.ts
+│   │   ├── lib/                  # api.ts, notifications.ts, utils.ts,
+│   │   │                         # db.ts, syncTypes.ts, store.ts,
+│   │   │                         # syncEngine.ts, authCache.ts
 │   │   ├── types/                # note.ts (NoteItem, ItemFilter), user.ts
 │   │   ├── App.tsx               # Auth gate + notification poller start
 │   │   ├── main.tsx              # React root
@@ -290,9 +298,9 @@ MyNotes/
 
 | Directory | Responsibility |
 |---|---|
-| `client/src/components/` | One file per UI concern; all presentational/interactive units. `Home.tsx` is the stateful orchestrator in `pages/`. |
-| `client/src/lib/` | Framework-agnostic client logic: HTTP wrapper, notification engine, pure helpers. |
-| `client/src/hooks/` | Reusable React behavior (focus trapping). |
+| `client/src/components/` | One file per UI concern; all presentational/interactive units. `Home.tsx` is the stateful orchestrator in `pages/`. Includes `OfflineIndicator.tsx`. |
+| `client/src/lib/` | Framework-agnostic client logic: HTTP wrapper, notification engine, pure helpers, **offline-first layer** (db.ts, store.ts, syncEngine.ts, syncTypes.ts, authCache.ts). |
+| `client/src/hooks/` | Reusable React behavior (focus trapping, sync status). |
 | `client/src/types/` | The client's view of API shapes (`NoteItem`) — intentionally mirrors `server/src/types/ItemDTO`. |
 | `client/src-tauri/` | Everything native: window lifecycle, tray, toasts, registry, autostart, single-instance. |
 | `server/src/routes/` | Thin wiring: path → middleware chain → controller. |
@@ -325,6 +333,7 @@ App.tsx
     ├── notes-grid → NoteCard[] (memoized, inside AnimatePresence)
     │                 └── NoteCardSkeleton[] while loading
     └── ComposerModal (create or edit, AnimatePresence)
+OfflineIndicator (shown when navigator.onLine is false)
 ```
 
 ### State ownership: why `Home` owns the list
@@ -381,8 +390,10 @@ The entire design system is one hand-written `styles.css` (~1100 lines). It was 
 | Task pill | `#ff9b9b` | Coral — task label |
 | Note pill | `#b8e3ff` | Blue — note label |
 | Completed | `#baff9b` + `opacity: .58` | Checked checkbox, dimmed card |
-| Heading font | Caveat (handwritten) | Brand, headings |
-| Body font | Inter | Everything else |
+| Heading font | Caveat (self-hosted via Fontsource, latin subset) | Brand, headings |
+| Body font | Inter (self-hosted via Fontsource, latin subset) | Everything else |
+
+**Fonts:** MyNotes self-hosts fonts using Fontsource with Latin-only subsets. Google Fonts runtime loading is no longer required. The fonts are bundled into the production build and available offline.
 
 **Shadow language:** cards use `5px 5px 0 #111` (hard offset); smaller controls use `3px 3px 0 #111`. No blurs, no gradients, no glassmorphism — by design.
 
@@ -507,7 +518,8 @@ sequenceDiagram
 
     U->>F: Click "Continue with Google"
     F->>A: GET /api/auth/google (browser navigation)
-    Note over A: authRateLimiter → passport.authenticate('google')
+    Note over A: authRateLimiter → captureClientOrigin → passport.authenticate('google')
+    A->>A: Set oauth_origin cookie (HttpOnly, 5min TTL)
     A->>G: Redirect to Google consent (clientID, callbackURL, scope: profile email, prompt: select_account)
     G->>U: Consent screen
     U->>G: Approve
@@ -516,8 +528,9 @@ sequenceDiagram
     A->>A: GoogleStrategy verify callback
     A->>DB: findOrCreateGoogleUser(profile)
     A->>A: req.session.userId = user._id
+    A->>A: Read + clear oauth_origin cookie → validate against allowlist
     A->>A: req.session.save()  ← explicit flush to MongoStore
-    A->>F: 302 redirect to CLIENT_URL (Set-Cookie: connect.sid)
+    A->>F: 302 redirect to validated origin (Set-Cookie: connect.sid)
     F->>A: GET /api/auth/me (cookie attached)
     A-->>F: user JSON → Home renders
 ```
@@ -546,7 +559,7 @@ sequenceDiagram
 
 ### Why not JWT?
 
-See the dedicated section [§38](#38-why-not-jwt). Short version: server-side revocation, simple cross-origin cookie model, and no token-refresh machinery for a single-user-per-device app.
+See the dedicated section [§39](#39-why-not-jwt). Short version: server-side revocation, simple cross-origin cookie model, and no token-refresh machinery for a single-user-per-device app.
 
 ---
 
@@ -680,7 +693,7 @@ MongoDB via Mongoose 8. Two collections plus the session store.
 
 ### Why `deletedAt` instead of deleting
 
-See [§19](#19-trash--soft-delete). Summary: recoverable deletes, an audit-friendly timestamp, and a single field that cleanly partitions active vs deleted query spaces — with a compound index making both fast.
+See [§20](#20-trash--soft-delete). Summary: recoverable deletes, an audit-friendly timestamp, and a single field that cleanly partitions active vs deleted query spaces — with a compound index making both fast.
 
 ### `notificationState` lifecycle
 
@@ -815,13 +828,102 @@ On exceed: **429** with a JSON body matching the app's error shape (`{ error: 'T
 
 ---
 
-## 17. Optimistic UI
+## 17. Offline-First Architecture (Phase 0–6)
+
+MyNotes is a **local-first** application. Every mutation (create, edit, toggle, delete, restore) writes to IndexedDB first, then syncs with the server in the background. The UI never waits for the network.
+
+### Storage layers
+
+| Layer | File | Purpose |
+|---|---|---|
+| IndexedDB | `lib/db.ts` | Typed foundation — `mynotes` database v1, four stores: `items`, `syncQueue`, `syncMeta`, `authCache` |
+| Auth cache | `lib/authCache.ts` | Read-through cache — server data mirrored into IndexedDB; dirty items protected from overwrite |
+| Local-first mutations | `lib/store.ts` | Write-ahead path — apply local change + enqueue sync operation in ONE IndexedDB transaction |
+| Sync engine | `lib/syncEngine.ts` | Queue drain — single-flight, exponential backoff, online/offline transitions, 429 Retry-After, 401 pause |
+| API client | `lib/api.ts` | HTTP — fetch wrapper with credentials, error normalization, `ApiError` with headers |
+
+### IndexedDB stores
+
+```
+mynotes (v1)
+├── items       — LocalItem[] (keyPath: 'id')
+│   indexes: by_updatedAt, by_deletedAt, by_dirty, by_clientId
+├── syncQueue   — SyncQueueItem[] (keyPath: 'seq', autoIncrement)
+│   indexes: by_itemId, by_createdAt
+├── syncMeta    — SyncMeta (keyPath: 'key')
+└── authCache   — CachedAuthUser (keyPath: 'key')
+```
+
+### The write-ahead path
+
+Every mutation follows the same atomic path:
+
+```
+User action
+→ store.ts: apply local change + enqueue sync op (ONE IndexedDB transaction)
+→ React UI updates immediately
+→ syncEngine: background drain (online: immediate; offline: waits)
+```
+
+### Conflict strategy: last-write-wins
+
+- **Dirty items** (pending queued operations) are NEVER overwritten by server snapshots.
+- **Non-dirty items** use the server's values (server is authoritative after sync).
+- **Field-level conflicts** are resolved by FIFO queue order — the user's latest intent wins.
+- **Delete wins over stale edits** — a soft-deleted item cannot be resurrected by a stale UPDATE.
+
+### Sync queue operations
+
+| Operation | Payload | Server endpoint |
+|---|---|---|
+| `create` | Full item snapshot | `POST /items` (idempotent via `clientRequestId`) |
+| `update` | `{ title, content, type }` | `PATCH /items/:id` |
+| `toggle` | `{ completed }` (absolute) | `PATCH /items/:id` |
+| `soft-delete` | empty | `DELETE /items/:id` |
+| `restore` | empty | `PATCH /items/:id/restore` |
+| `permanent-delete` | empty | `DELETE /items/:id/permanent` |
+
+### Temp-ID → canonical-ID reconciliation
+
+Locally-created items get a `local-<uuid>` id. When the CREATE op is acknowledged by the server, `reconcileCreatedItem` atomically:
+1. Re-keys the local record to the canonical server id
+2. Re-points all dependent queued operations
+3. Notifies the React UI via `canonicalizationListener`
+
+### Online/offline transitions
+
+- **Online event**: clears backoff, triggers immediate sync drain
+- **Offline event**: marks `isOffline`, drain loop skips network work
+- **Window focus**: triggers sync if queue has pending work (throttled to 2s)
+- **Cold start**: hydrates UI from IndexedDB, then background sync
+
+### Retry/backoff
+
+```
+5s → 10s → 20s → 40s → 80s → 160s → 320s → 300s (capped at 5 min)
++/-30% jitter on each attempt
+```
+
+- 429 with `Retry-After` header: respects server-provided delay
+- 401: pauses drain (no delete, no retry); resumes on next trigger
+- Single retry timer (at most one); cleared when queue is empty
+
+### Notification safety
+
+- Soft-deleted tasks have `notificationState: 'delivered'` set atomically by the server
+- Restoring a deleted task does NOT resurrect old pending notifications
+- Offline-created tasks do NOT generate notifications until synced to server
+- Notification polling is separate from sync — no coupling between the two systems
+
+---
+
+## 18. Optimistic UI
 
 ### The concept
 
-**Optimistic UI means we update the screen before waiting for the server.** The user's intent is applied to local state instantly; the network request happens in the background; the server response either confirms (keep the optimistic state) or fails (roll back and show an error). The perceived latency of every mutation drops to zero.
+**Optimistic UI means we update the screen before waiting for the server.** With the offline-first architecture (§17), every mutation writes to IndexedDB first, then the sync engine replays it against the server. The perceived latency of every mutation drops to zero — whether online or offline.
 
-MyNotes applies this to **all five** mutations. Here is each one as implemented in `Home.tsx` (and `DeletedModal.tsx` for restore).
+MyNotes applies this to **all five** mutations. Here is each one as implemented in `store.ts` (local-first layer) and `Home.tsx` / `DeletedModal.tsx` (React UI).
 
 ### CREATE — `handleCreate(title, content, type)`
 
@@ -841,7 +943,7 @@ MyNotes applies this to **all five** mutations. Here is each one as implemented 
 4. **Success:** keep optimistic state; clear the error banner.
 5. **Failure:** only if this edit is still the newest for the item (`editVersions.get(id) === capturedVersion + 1`), restore `previous` into its slot and show the error. If a newer edit superseded it, the stale failure is **silently ignored**.
 6. **Rollback:** positional replace — `findIndex` by id; if `-1` (item was deleted/replaced), do nothing.
-7. **Race protection:** `editVersions` — see [§18](#18-race-condition-handling). Note the PATCH sends only the three editable fields; `completed` is never included, so an edit can never clobber a concurrent toggle.
+7. **Race protection:** `editVersions` — see [§19](#19-race-condition-handling). Note the PATCH sends only the three editable fields; `completed` is never included, so an edit can never clobber a concurrent toggle.
 
 ### DELETE — `handleDelete(id)`
 
@@ -875,7 +977,7 @@ MyNotes applies this to **all five** mutations. Here is each one as implemented 
 
 ---
 
-## 18. Race Condition Handling
+## 19. Race Condition Handling
 
 These are real interleavings the code is written to survive. For each: what could go wrong, and what actually protects it.
 
@@ -933,7 +1035,7 @@ POST resolves → server item exists!
 
 ---
 
-## 19. Trash / Soft Delete
+## 20. Trash / Soft Delete
 
 ### Delete path
 
@@ -984,11 +1086,11 @@ User clicks "Delete forever" (with inline confirm: Cancel / Delete forever)
 - **Recoverability** — the whole point; no confirmation dialog tax on every delete.
 - **Cheap partitioning** — `deletedAt: null` vs `$ne: null` cleanly splits active/trash views with one indexed field.
 - **Notification cancellation** — the same write that soft-deletes cancels pending notifications atomically; there's no window where a deleted task can still toast.
-- **Tradeoff** — deleted documents consume storage until permanently deleted; there is currently no auto-purge (see [§40](#40-known-limitations)).
+- **Tradeoff** — deleted documents consume storage until permanently deleted; there is currently no auto-purge (see [§41](#41-known-limitations)).
 
 ---
 
-## 20. Notification System
+## 21. Notification System
 
 Desktop-only (Tauri). The web/PWA build never polls and never notifies — `App.tsx` calls `startNotificationPolling()` only when `isTauri()` is true, and logout stops it.
 
@@ -1030,7 +1132,7 @@ Server-side: soft delete sets `notificationState: 'delivered'` in the same write
 
 ---
 
-## 21. Notification Retry / Backoff
+## 22. Notification Retry / Backoff
 
 Display failures (permission denied, toast error) must not hammer the API or spam retries every 20s. `lib/notifications.ts` keeps a tiny in-memory state:
 
@@ -1064,7 +1166,7 @@ failure 5+ → wait 5 min (MAX_RETRY_DELAY_MS cap)
 
 ---
 
-## 22. Tauri Architecture
+## 23. Tauri Architecture
 
 ### What Tauri does in MyNotes
 
@@ -1105,11 +1207,11 @@ The frontend is already a small static bundle; embedding a whole Chromium + Node
 | Plugins | `tauri_plugin_notification` (permission API), `tauri_plugin_autostart`, `tauri_plugin_single_instance` |
 | Tray | `TrayIconBuilder` with Open/Quit menu |
 | Close behavior | `on_window_event` → `CloseRequested` → `window.hide()` + `api.prevent_close()` (Windows) |
-| AUMID | `register_aumid()` at setup — see [§23](#23-windows-notifications) |
+| AUMID | `register_aumid()` at setup — see [§24](#24-windows-notifications) |
 
 ---
 
-## 23. Windows Notifications
+## 24. Windows Notifications
 
 This is the most bespoke part of the desktop app. The standard `tauri-plugin-notification` **can show** toasts on Windows, but its desktop API exposes **no click/activation handler** (its `onAction` listener only works on mobile). A toast without an `Activated` handler just dismisses when clicked — "notification click-to-focus" would be impossible. So MyNotes calls the underlying WinRT wrapper directly.
 
@@ -1165,11 +1267,11 @@ JS poller (hidden window, every 20s)
   → show_main_window: show + unminimize + set_focus
 ```
 
-**Background context requirement:** this whole chain works with the window closed because closing only *hides* the window — the process, the WebView (with its session cookie), and the poller stay alive (see [§24](#24-system-tray)).
+**Background context requirement:** this whole chain works with the window closed because closing only *hides* the window — the process, the WebView (with its session cookie), and the poller stay alive (see [§25](#25-system-tray)).
 
 ---
 
-## 24. System Tray
+## 25. System Tray
 
 Built with Tauri's tray-icon feature (`TrayIconBuilder`):
 
@@ -1196,7 +1298,7 @@ This is the WhatsApp/Telegram desktop pattern: closing the window means "go away
 
 ---
 
-## 25. Autostart
+## 26. Autostart
 
 Uses the official `tauri-plugin-autostart` (Windows: registry `Run` key — no scripts, no scheduled tasks).
 
@@ -1213,7 +1315,7 @@ if !autolaunch.is_enabled().unwrap_or(false) { let _ = autolaunch.enable(); }
 
 ---
 
-## 26. Single Instance
+## 27. Single Instance
 
 `tauri_plugin_single_instance::init(callback)`:
 
@@ -1224,9 +1326,9 @@ if !autolaunch.is_enabled().unwrap_or(false) { let _ = autolaunch.enable(); }
 
 ---
 
-## 27. PWA Architecture
+## 28. PWA Architecture
 
-Web-only (the Tauri build excludes all of this — see [§28](#28-tauri-vs-pwa-build)).
+Web-only (the Tauri build excludes all of this — see [§29](#29-tauri-vs-pwa-build)).
 
 ### Configuration (`client/vite.config.ts` → `VitePWA`)
 
@@ -1249,11 +1351,11 @@ Web-only (the Tauri build excludes all of this — see [§28](#28-tauri-vs-pwa-b
 
 ### Offline behavior — honestly
 
-With no network, the precached shell may load, but every data request fails; the UI shows the offline indicator and the error banner. **Offline-first sync is NOT implemented** — there is no IndexedDB cache, no mutation queue, no replay. An internet connection is required for the app to be useful.
+With no network, the precached shell loads and previously synced data is served from IndexedDB via the offline-first architecture (Phase 0–6). Local mutations (create/edit/toggle/delete/restore) work offline and are queued for background sync. The UI shows the OfflineIndicator and the app remains fully usable. When connectivity returns, the sync engine automatically reconciles local changes with the server.
 
 ---
 
-## 28. Tauri vs PWA Build
+## 29. Tauri vs PWA Build
 
 The two build flavors differ in exactly two ways, both controlled by `scripts/tauri-frontend-build.mjs` (wired as `beforeBuildCommand` in `tauri.conf.json`):
 
@@ -1279,7 +1381,7 @@ Tauri build (npm run tauri build)
 
 ---
 
-## 29. Build and Packaging
+## 30. Build and Packaging
 
 ### Frontend (web)
 
@@ -1317,7 +1419,7 @@ The embedded frontend has no dev server behind it — whatever URL is compiled i
 
 ---
 
-## 30. Environment Configuration
+## 31. Environment Configuration
 
 Variable names only — values live in `.env` files that are gitignored.
 
@@ -1329,6 +1431,7 @@ Variable names only — values live in `.env` files that are gitignored.
 | `MONGODB_URI` | `db/connect.ts`, `session.ts` | **Required.** Mongo connection string; also backs the session store | Atlas URI in prod |
 | `SESSION_SECRET` | `middleware/session.ts` | **Required.** Signs the `connect.sid` cookie | Must be a strong random value in prod |
 | `CLIENT_URL` | `env.allowedOrigins`, `googleCallback` redirect | Frontend origin for CORS + post-login redirect | `mynotes-pooq.onrender.com` in prod |
+| `ALLOWED_ORIGINS` | `env.allowedOrigins` | Comma-separated list of allowed origins for CORS and OAuth redirect. Defaults to `CLIENT_URL` + Tauri origins when unset. | `http://localhost:4173,http://localhost:5173` for local dev with preview |
 | `GOOGLE_CLIENT_ID` | `config/passport.ts` | **Required.** OAuth client identifier | Same in both |
 | `GOOGLE_CLIENT_SECRET` | `config/passport.ts` | **Required.** OAuth code exchange | Same in both |
 | `GOOGLE_CALLBACK_URL` | `config/passport.ts` | **Required.** Full callback URL registered in Google Console | Must match the deployed API domain exactly |
@@ -1342,7 +1445,7 @@ Variable names only — values live in `.env` files that are gitignored.
 
 ---
 
-## 31. CORS
+## 32. CORS
 
 `server.ts`:
 
@@ -1367,7 +1470,7 @@ app.use(cors({ origin: env.allowedOrigins, credentials: true }))
 
 ---
 
-## 32. Security Architecture
+## 33. Security Architecture
 
 ### Implemented layers
 
@@ -1394,7 +1497,7 @@ app.use(cors({ origin: env.allowedOrigins, credentials: true }))
 
 ---
 
-## 33. Performance
+## 34. Performance
 
 Optimizations actually implemented, with the problems they solved:
 
@@ -1417,7 +1520,7 @@ No benchmark numbers are claimed here because none exist in the repository; the 
 
 ---
 
-## 34. Accessibility
+## 35. Accessibility
 
 | Mechanism | Where | Why it matters |
 |---|---|---|
@@ -1438,7 +1541,7 @@ No benchmark numbers are claimed here because none exist in the repository; the 
 
 ---
 
-## 35. Responsive Design
+## 36. Responsive Design
 
 Actual breakpoints (from `styles.css`): **700px** (mobile search swap) and **500px** (compact adjustments). Everything between is fluid.
 
@@ -1457,7 +1560,7 @@ Actual breakpoints (from `styles.css`): **700px** (mobile search swap) and **500
 
 ---
 
-## 36. Error Handling
+## 37. Error Handling
 
 ### Backend (`middleware/error.ts`)
 
@@ -1476,15 +1579,15 @@ Controllers wrap service calls in try/catch and `next(error)` — no error handl
 
 - **API errors:** `request<T>` normalizes anything non-OK into a thrown `Error` carrying the server's `{ error }` message when available.
 - **Initial load failure:** red `status-bar` with `role="alert"` + a **Retry** button calling `refreshItems()`.
-- **Mutation failures:** every optimistic op rolls back and routes the message into the same banner (see [§17](#17-optimistic-ui)).
+- **Mutation failures:** every optimistic op rolls back and routes the message into the same banner (see [§18](#18-optimistic-ui)).
 - **Logout:** `handleLogout` calls the API but **proceeds with local logout even on failure** — a dead network shouldn't trap the user in the app. (The cookie-clearing fix in [§10](#10-session-authentication) makes server-side clearing actually work when reachable.)
-- **Notifications:** display failure → batch stays pending + backoff ([§21](#21-notification-retry--backoff)); check failure → `console.warn`, next tick retries naturally; 401 while polling is treated as "signed out," not an error.
+- **Notifications:** display failure → batch stays pending + backoff ([§22](#22-notification-retry--backoff)); check failure → `console.warn`, next tick retries naturally; 401 while polling is treated as "signed out," not an error.
 - **Restore failure:** modal-only rollback + modal error banner; Home untouched.
 - **Network offline:** `OfflineIndicator` (`navigator.onLine` + online/offline events) with `role="status"`/`aria-live="polite"`.
 
 ---
 
-## 37. Important Design Decisions
+## 38. Important Design Decisions
 
 | Decision | Why | Tradeoff |
 |---|---|---|
@@ -1493,20 +1596,20 @@ Controllers wrap service calls in try/catch and `next(error)` — no error handl
 | **Vite** | Fast dev server, native ESM builds, first-class PWA plugin | Newer toolchain than CRA-style setups |
 | **Express** | Minimal, explicit middleware pipeline that's easy to reason about | Manual wiring for things frameworks bundle |
 | **MongoDB + Mongoose** | Document shape maps 1:1 to `NoteItem`; schema validation + indexes without migrations for a single-collection app | No relational joins/constraints — irrelevant at this scale; `userId` is a string reference, not a DB-level FK |
-| **Server-side sessions (not JWT)** | Revocation, simplicity, cookie-native browsers | Session lookup per request; store dependency (see [§38](#38-why-not-jwt)) |
+| **Server-side sessions (not JWT)** | Revocation, simplicity, cookie-native browsers | Session lookup per request; store dependency (see [§39](#39-why-not-jwt)) |
 | **Google OAuth** | Zero password handling; free profile data; `select_account` UX | Requires Google config; unauthenticated users can't use the app |
 | **Tauri** | Native tray/toasts/autostart at ~10 MB instead of ~100 MB Electron; reuses WebView2 | Rust on the native side; Windows-specific WinRT/registry work (AUMID) |
 | **PWA** | Installable web app from the same codebase; no store | No offline data (deliberate); SW caching pitfalls (solved by excluding API + desktop) |
 | **Optimistic UI** | Instant feel for all 5 mutations | Rollback + race-condition machinery (`editVersions`, `toggleTargets`, `pendingCreates`…) — complexity budget spent in one component |
 | **Soft delete** | Recoverability without confirm-dialog tax | Storage until purge; every query must remember the `deletedAt` filter |
-| **Polling (20s), not WebSockets** | Stateless server, Render-friendly, trivially correct | Up to 20s notification latency; ~3 req/min baseline (see [§39](#39-why-polling-instead-of-websockets)) |
+| **Polling (20s), not WebSockets** | Stateless server, Render-friendly, trivially correct | Up to 20s notification latency; ~3 req/min baseline (see [§40](#40-why-polling-instead-of-websockets)) |
 | **Plain CSS** | Full control over a small, distinctive design system; zero build deps | No utility ergonomics; manual consistency |
 | **Framer Motion** | Layout animations (`AnimatePresence` card enter/exit), the checkmark path animation, modal transitions | ~127 KB vendor chunk (accepted, split separately) |
 | **MongoStore (connect-mongo)** | Sessions survive deploys/restarts; TTL cleanup by MongoDB | Mongo dependency for auth; slightly slower auth than memory |
 
 ---
 
-## 38. Why Not JWT?
+## 39. Why Not JWT?
 
 MyNotes deliberately uses server-side sessions. The reasoning **in this app's context**:
 
@@ -1524,7 +1627,7 @@ MyNotes deliberately uses server-side sessions. The reasoning **in this app's co
 
 ---
 
-## 39. Why Polling Instead of WebSockets?
+## 40. Why Polling Instead of WebSockets?
 
 Current architecture: the desktop client polls `GET /items/notifications/pending` every 20 seconds (chained, overlap-guarded, backed off on failure).
 
@@ -1540,11 +1643,10 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 
 ---
 
-## 40. Known Limitations
+## 41. Known Limitations
 
 **CURRENT LIMITATIONS** (all verifiable in code):
 
-- **No offline-first sync.** No IndexedDB, no mutation queue, no replay. Offline = shell only; all operations require connectivity.
 - **Notifications require the desktop background process.** Web/PWA users get no notifications (by design — browser notification UX + scope); if `mynotes.exe` isn't running (quit via tray), no toasts.
 - **Polling latency.** Up to 20s (plus backoff after failures) between a task's creation and its toast.
 - **No cross-device live updates.** An open Home view doesn't refresh when another device mutates data; you see changes on next load/mutation.
@@ -1557,13 +1659,13 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 
 ---
 
-## 41. Future Roadmap
+## 42. Future Roadmap
 
 > ⚠️ **Everything in this section is NOT IMPLEMENTED.** It's a directional list, not a feature list.
 
 | Idea | Sketch |
 |---|---|
-| **Offline-first sync** | IndexedDB mirror of the item list + mutation queue; replay on reconnect with last-write-wins or field-level conflict resolution; service worker Background Sync for the queue |
+| ~~**Offline-first sync**~~ | ✅ **Implemented (Phase 0–6).** IndexedDB mirror, durable sync queue, last-write-wins conflict resolution, exponential backoff, online/offline transitions. |
 | **Richer notifications** | Per-task toasts with click-through to the specific item; granular per-device preferences (server-side, not just localStorage) |
 | **Themes** | CSS custom-property swap for a real dark mode; the Settings Appearance row becomes functional |
 | **Attachments/images** | Object storage + item references; size and type limits |
@@ -1574,7 +1676,7 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 
 ---
 
-## 42. Troubleshooting
+## 43. Troubleshooting
 
 ### OAuth redirect mismatch
 - **Symptom:** Google error `redirect_uri_mismatch` at consent.
@@ -1628,7 +1730,7 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 
 ---
 
-## 43. Interview Questions
+## 44. Interview Questions
 
 ### Beginner
 
@@ -1668,7 +1770,7 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 
 **Q: How does optimistic UI work here?**
 - **SHORT:** Every mutation applies intent to local state instantly, fires the request in background, reconciles on success, rolls back on failure — with per-operation guards against races.
-- **DETAILED:** Five operations, each with a snapshot-and-reconcile pattern in `Home.tsx` ([§17](#17-optimistic-ui) has all five step-by-step). The machinery: `itemsRef` (synchronous state mirror for stable callbacks), `pendingCreates`/`cancelledCreates` (temp-ID lifecycle), `pendingDeleteIds` (duplicate-DELETE guard), `toggleTargets` (latest-wins toggles), `editVersions` (stale-edit protection). Rollbacks are positional and existence-checked so a failure can never resurrect or duplicate an item.
+- **DETAILED:** Five operations, each with a snapshot-and-reconcile pattern in `Home.tsx` ([§18](#18-optimistic-ui) has all five step-by-step). The machinery: `itemsRef` (synchronous state mirror for stable callbacks), `pendingCreates`/`cancelledCreates` (temp-ID lifecycle), `pendingDeleteIds` (duplicate-DELETE guard), `toggleTargets` (latest-wins toggles), `editVersions` (stale-edit protection). Rollbacks are positional and existence-checked so a failure can never resurrect or duplicate an item.
 
 **Q: How does rate limiting work?**
 - **SHORT:** express-rate-limit with two in-memory IP-keyed limiters: auth 10 req/15min, API 120 req/min; 429s carry `Retry-After` and the app's error shape.
@@ -1678,7 +1780,7 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 
 **Q: How are race conditions handled?**
 - **SHORT:** Five focused guards, one per race class: `editVersions` (stale edits), `toggleTargets` (toggle latest-wins), `pendingCreates`/`cancelledCreates` (temp-ID lifecycle), `pendingDeleteIds` (duplicate deletes), plus existence-checked positional rollbacks.
-- **DETAILED:** Walk [§18](#18-race-condition-handling)'s scenarios. The unifying principles: (1) every async op captures its precondition and re-validates it before mutating ("is this still the latest? does the item still exist?"); (2) field-disjoint PATCH payloads (edit never sends `completed`, toggle never sends title/content) so concurrent ops can't clobber each other; (3) the server response — not the client's imagination — is the reconciliation source.
+- **DETAILED:** Walk [§19](#19-race-condition-handling)'s scenarios. The unifying principles: (1) every async op captures its precondition and re-validates it before mutating ("is this still the latest? does the item still exist?"); (2) field-disjoint PATCH payloads (edit never sends `completed`, toggle never sends title/content) so concurrent ops can't clobber each other; (3) the server response — not the client's imagination — is the reconciliation source.
 
 **Q: How does `editVersions` work?**
 - **SHORT:** A `Map<itemId, number>` version counter; each edit increments it, and a settling PATCH only rolls back if its version is still the newest.
@@ -1710,18 +1812,24 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 
 **Q: Why polling instead of WebSockets?**
 - **SHORT:** 20s-tolerant latency, a stateless request/response server, and a tiny baseline cost (~3 req/min, count-only) beat the connection-infrastructure cost of WebSockets for this product.
-- **DETAILED:** See [§39](#39-why-polling-instead-of-websockets). Key points: chained scheduling solved hidden-window timer throttling; overlap guard + backoff make it robust; no connection registry/sticky sessions/proxy config; the tradeoff is latency and periodic idle requests — acceptable when the requirement is "notify me soon," not "notify me instantly."
+- **DETAILED:** See [§40](#40-why-polling-instead-of-websockets). Key points: chained scheduling solved hidden-window timer throttling; overlap guard + backoff make it robust; no connection registry/sticky sessions/proxy config; the tradeoff is latency and periodic idle requests — acceptable when the requirement is "notify me soon," not "notify me instantly."
 
 ---
 
-## 44. File-by-File Logic Map
+## 45. File-by-File Logic Map
 
 | File | Responsibility | Important logic |
 |---|---|---|
-| `client/src/pages/Home.tsx` | Authenticated app screen; owns the item list and all mutations | Optimistic create/edit/toggle/delete; `itemsRef` mirror; `pendingCreates`, `cancelledCreates`, `pendingDeleteIds`, `toggleTargets`, `editVersions` race guards; `handleRestoreItem` (replace-or-insert, createdAt ordering); skeleton grid; error banner |
-| `client/src/lib/api.ts` | HTTP layer | `request<T>` wrapper; `credentials: 'include'`; `okStatuses` (404-as-success for deletes); error normalization from `{ error }` bodies |
+| `client/src/pages/Home.tsx` | Authenticated app screen; owns the item list and all mutations | Optimistic create/edit/toggle/delete; `itemsRef` mirror; `pendingCreates`, `cancelledCreates`, `pendingDeleteIds`, `toggleTargets`, `editVersions` race guards; `handleRestoreItem` (replace-or-insert, createdAt ordering); skeleton grid; error banner; offline-first hydration from IndexedDB |
+| `client/src/lib/api.ts` | HTTP layer | `request<T>` wrapper; `credentials: 'include'`; `okStatuses` (404-as-success for deletes); error normalization from `{ error }` bodies; `ApiError` with headers for Retry-After |
 | `client/src/lib/notifications.ts` | Desktop notification engine | Chained 20s polling; `checkInFlight`; focus gate; permission flow; `show_toast` invoke; deliver-after-display; exponential backoff (20s→5min); localStorage preference (`mynotes:desktop-notifications`) |
 | `client/src/lib/utils.ts` | Shared helpers | `initialsOf` — avatar fallback initials |
+| `client/src/lib/db.ts` | IndexedDB foundation | `mynotes` database v1; four stores: `items`, `syncQueue`, `syncMeta`, `authCache`; typed transaction support; atomic readwrite operations |
+| `client/src/lib/syncTypes.ts` | Offline-first types | `LocalItem`, `SyncQueueItem`, `SyncMeta`, `CachedAuthUser`, `SyncStatus`; operation payloads for create/update/toggle/delete/restore/permanent-delete |
+| `client/src/lib/store.ts` | Local-first mutations | Write-ahead path: apply local change + enqueue sync op in ONE IndexedDB transaction; create/update/toggle/softDelete/restore/permanentDelete functions |
+| `client/src/lib/syncEngine.ts` | Queue drain | Single-flight; exponential backoff with jitter; online/offline transitions; focus-triggered resumption; 429 Retry-After; 401 pause; canonicalization listener for temp→server ID reconciliation |
+| `client/src/lib/authCache.ts` | Read-through cache | Server data mirrored into IndexedDB; dirty items protected from overwrite; merge utilities for server snapshots |
+| `client/src/hooks/useSyncStatus.ts` | Sync status hook | Polls `getSyncStatus()` every 2s; returns idle/syncing/waiting/paused/offline |
 | `client/src/components/NoteCard.tsx` | Card UI | `memo`'d; pill, actions, title/content, animated checkmark |
 | `client/src/components/ComposerModal.tsx` | Create/edit dialog | Focus trap; Escape; dirty-check backdrop close; double-submit guard (`submitted` ref, create only); visually-hidden labels; maxLength mirrors of server caps |
 | `client/src/components/DeletedModal.tsx` | Trash UI | Fetch-on-open; optimistic restore/permanent-delete with rollback; inline confirm for delete-forever; canonical item passed via `onRestore` |
@@ -1731,8 +1839,9 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 | `client/src/components/SearchBar.tsx` | Search | Desktop input; mobile trigger/overlay with auto-focus, Escape/outside close, query preservation |
 | `client/src/components/FilterTabs.tsx` | Filters | `aria-pressed` toggle buttons |
 | `client/src/components/NoteCardSkeleton.tsx` | Loading placeholder | Static DOM, CSS shimmer, `aria-hidden` |
+| `client/src/components/OfflineIndicator.tsx` | Offline status | Shows "You're offline" when `navigator.onLine` is false; listens to online/offline events |
 | `client/src/hooks/useFocusTrap.ts` | Modal focus management | Trap Tab/Shift+Tab; initial focus to first focusable; restore previous focus on unmount |
-| `client/src/App.tsx` | Auth gate | `getCurrentUser` on mount; starts/stops notification polling (Tauri only); Login/Home switch |
+| `client/src/App.tsx` | Auth gate | `getCurrentUser` on mount; offline-first hydration from cached profile; starts/stops notification polling (Tauri only); Login/Home switch; account isolation on switch |
 | `client/src/types/note.ts` | Client data contract | `NoteItem`, `ItemType`, `ItemFilter` (mirrors server ItemDTO) |
 | `client/vite.config.ts` | Build config | Vendor manualChunks; VitePWA (manifest, precache, **no API runtime caching**); `VITE_SKIP_PWA` switch |
 | `client/scripts/tauri-frontend-build.mjs` | Desktop build guard | Loads `.env.tauri`; **refuses localhost API URL**; sets `VITE_SKIP_PWA=1` |
@@ -1744,19 +1853,19 @@ Current architecture: the desktop client polls `GET /items/notifications/pending
 | `server/src/middleware/validate.ts` | Input validation | Whitelist parsers (create/update); ObjectId check; drops unknown fields |
 | `server/src/middleware/rate-limit.ts` | Abuse protection | `authRateLimiter` 10/15min; `apiRateLimiter` 120/min; draft-7 headers |
 | `server/src/middleware/error.ts` | Error normalization | Validation/CastError/duplicate-key/JSON-parse mapping; generic 500 |
-| `server/src/controllers/auth.controller.ts` | Auth HTTP | `googleCallback` (session save → redirect); `getMe`; `updateMe` (name validation); `logout` (destroy + matching clearCookie) |
+| `server/src/controllers/auth.controller.ts` | Auth HTTP | `googleCallback` (session save → redirect with validated origin); `getMe`; `updateMe` (name validation); `logout` (destroy + matching clearCookie) |
 | `server/src/services/auth.service.ts` | User logic | `findOrCreateGoogleUser` (create with Google name; existing = sync email/avatar only, **name preserved**); `findUserById`; `updateUserProfile` |
 | `server/src/config/passport.ts` | OAuth wiring | GoogleStrategy; serialize/deserialize |
-| `server/src/config/env.ts` | Typed env access | Lazy getters; required-var errors; Tauri origin allowlist |
-| `server/src/controllers/item.controller.ts` | Item HTTP | DTO mapping (`toItemDTO`); 404 semantics; count/delivered endpoints |
+| `server/src/config/env.ts` | Typed env access | Lazy getters; required-var errors; Tauri origin allowlist; `ALLOWED_ORIGINS` support |
+| `server/src/controllers/item.controller.ts` | Item HTTP | DTO mapping (`toItemDTO`); 404 semantics; count/delivered endpoints; idempotent create via `clientRequestId` |
 | `server/src/services/item.service.ts` | Item business logic | All queries scoped by userId + deletedAt; soft-delete with atomic notification cancellation; restore; permanent delete; notification count/mark |
-| `server/src/models/Item.ts` | Schema | Field validators/enums; `deletedAt`; two compound indexes |
+| `server/src/models/Item.ts` | Schema | Field validators/enums; `deletedAt`; two compound indexes; `clientRequestId` unique sparse index |
 | `server/src/models/User.ts` | Schema | unique `googleId`; lowercased email |
 | `server/src/db/connect.ts` | DB connection | Mongoose connect |
 
 ---
 
-## 45. End-to-End Request Examples
+## 46. End-to-End Request Examples
 
 ### Login
 
@@ -1859,7 +1968,7 @@ App                             → MyNotes front and center
 
 ---
 
-## 46. Data Flow vs Control Flow
+## 47. Data Flow vs Control Flow
 
 **Data flow** — how information moves:
 
@@ -1905,7 +2014,7 @@ The WebView can only invoke registered commands — the Rust surface is the secu
 
 ---
 
-## 47. Project Strengths
+## 48. Project Strengths
 
 - **Clear separation of concerns** — routes/controllers/services/models on the server; dumb components + one stateful orchestrator on the client; native logic isolated in one Rust file.
 - **Server-authoritative data** — identity, validation, and queries all live behind the session boundary; the client is a projection, never an authority.
@@ -1919,7 +2028,7 @@ The WebView can only invoke registered commands — the Rust surface is the secu
 
 ---
 
-## 48. Tradeoffs
+## 49. Tradeoffs
 
 | Decision | Gained | Sacrificed |
 |---|---|---|
@@ -1936,7 +2045,7 @@ The WebView can only invoke registered commands — the Rust surface is the secu
 
 ---
 
-## 49. Release Information
+## 50. Release Information
 
 | Item | Value |
 |---|---|
@@ -1951,7 +2060,7 @@ The WebView can only invoke registered commands — the Rust surface is the secu
 
 ---
 
-## 50. Final Summary
+## 51. Final Summary
 
 ### MyNotes in 60 seconds
 
@@ -1969,7 +2078,7 @@ The WebView can only invoke registered commands — the Rust surface is the secu
 
 **Desktop.** Tauri 2 embeds the same bundle in WebView2. `lib.rs` registers the AUMID (`com.mynotes.app`) in `HKCU\...\AppUserModelId` and on the process, so Windows attributes its toasts. Closing the window hides it (`prevent_close`) — the process, WebView session, and poller keep running; only the tray's Quit exits. Autostart runs it hidden at login via the `--autostart` argument; single-instance hands focus to the running process on a second launch. Notifications: the JS poller checks a count endpoint every 20s (chained timers survive hidden-window throttling; `checkInFlight` prevents overlap), shows a generic toast through the custom `show_toast` Rust command — used because the notification plugin has no desktop click API — and marks the batch delivered only after display succeeds, backing off 20s→5min on failures. Clicking a toast fires WinRT `Activated`, which hops to the main thread and focuses the window.
 
-**Builds & ops.** The web build (`npm run build`) includes the PWA service worker and precaches static assets only — never `/api/*`. The desktop build runs `tauri-frontend-build.mjs`, which loads `.env.tauri`'s production API URL, **refuses to build against localhost**, and sets `VITE_SKIP_PWA=1` because WebView2's throttled service-worker updates were serving stale code after installs. Artifacts: NSIS + MSI installers at version 0.1.0. Known gaps, honestly: no offline sync, no live cross-device updates, unbounded trash, fixed light theme, per-process rate-limit memory.
+**Builds & ops.** The web build (`npm run build`) includes the PWA service worker and precaches static assets only — never `/api/*`. The desktop build runs `tauri-frontend-build.mjs`, which loads `.env.tauri`'s production API URL, **refuses to build against localhost**, and sets `VITE_SKIP_PWA=1` because WebView2's throttled service-worker updates were serving stale code after installs. Artifacts: NSIS + MSI installers at version 0.1.0. Known gaps, honestly: no live cross-device updates (polling-based, ~20s latency), unbounded trash, fixed light theme, per-process rate-limit memory, browser notifications not supported (Tauri-only).
 
 ### Key things I should remember
 

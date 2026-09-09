@@ -40,7 +40,38 @@ export function parseCreateItemBody(body: unknown): ParseResult<CreateItemInput>
     return { error: 'Type must be either task or note.' }
   }
 
-  return { data: { title: title.trim(), content: content.trim(), type: type as ItemType } }
+  // Optional idempotency key (offline-first Phase 2). Never required —
+  // legacy clients that omit it keep the exact previous behavior.
+  const rawClientRequestId = data.clientRequestId
+  let clientRequestId: string | undefined
+  if (rawClientRequestId !== undefined) {
+    if (typeof rawClientRequestId !== 'string') {
+      return { error: 'clientRequestId must be a string.' }
+    }
+    const trimmedId = rawClientRequestId.trim()
+    if (trimmedId.length === 0) {
+      return { error: 'clientRequestId must not be empty.' }
+    }
+    if (trimmedId.length > 100) {
+      return { error: 'clientRequestId must be 100 characters or less.' }
+    }
+    // Standard UUID shape (any version, case-insensitive) — the client
+    // generates crypto.randomUUID() values. Normalized to lowercase so the
+    // unique index treats "A…"/"a…" as the same idempotency key.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmedId)) {
+      return { error: 'clientRequestId must be a valid UUID.' }
+    }
+    clientRequestId = trimmedId.toLowerCase()
+  }
+
+  return {
+    data: {
+      title: title.trim(),
+      content: content.trim(),
+      type: type as ItemType,
+      ...(clientRequestId !== undefined ? { clientRequestId } : {}),
+    },
+  }
 }
 
 /** Parse + validate an update-item body. Pure function, same messages as Phase 2. */

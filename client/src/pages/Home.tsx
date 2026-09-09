@@ -9,6 +9,20 @@ import { NoteCardSkeleton } from '../components/NoteCardSkeleton'
 import { EmptyState } from '../components/EmptyState'
 import { ComposerModal } from '../components/ComposerModal'
 import * as api from '../lib/api'
+import {
+  cacheActiveItems,
+  compareNoteItems,
+  getCreateOpSeqMap,
+  loadCachedActiveItems,
+} from '../lib/authCache'
+import { getDirtyItems, hasPendingSyncOperations } from '../lib/db'
+import {
+  createItemLocalFirst,
+  softDeleteItemLocalFirst,
+  toggleItemLocalFirst,
+  updateItemLocalFirst,
+} from '../lib/store'
+import { setCanonicalizationListener, syncNow } from '../lib/syncEngine'
 import type { ItemFilter, ItemType, NoteItem } from '../types/note'
 import type { User } from '../types/user'
 
@@ -18,17 +32,9 @@ interface HomeProps {
   onUserUpdated: (user: User) => void
 }
 
-const TEMP_ID_PREFIX = 'temp-'
 
-/** Client-only id for an item that has not been created on the server yet. */
-function createTempItemId(): string {
-  return `${TEMP_ID_PREFIX}${crypto.randomUUID()}`
-}
 
-/** True when the id belongs to an optimistically created, still-pending item. */
-function isTempId(id: string): boolean {
-  return id.startsWith(TEMP_ID_PREFIX)
-}
+
 
 export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   const [items, setItems] = useState<NoteItem[]>([])
@@ -43,13 +49,12 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   // the guards are read/written synchronously across re-renders, without
   // triggering renders themselves.
   const pendingDeleteIds = useRef<Set<string>>(new Set())
-  const toggleTargets = useRef<Map<string, boolean>>(new Map())
-  const pendingCreates = useRef<Map<string, NoteItem>>(new Map())
-  const cancelledCreates = useRef<Set<string>>(new Set())
-  // Monotonic version counter per item id. When an optimistic edit PATCH
-  // settles, it checks whether a newer edit has already superseded it; if so,
-  // the stale failure is silently ignored instead of rolling back newer state.
-  const editVersions = useRef<Map<string, number>>(new Map())
+
+  // Phase 1: true once the initial list was served from the IndexedDB cache.
+  // While set, a failed server refresh must not clobber the hydrated UI with
+  // an error banner — connectivity is already communicated globally by the
+  // OfflineIndicator, and mutation errors keep their own banners.
+  const hydratedFromCacheRef = useRef(false)
 
   // Latest-items mirror for the memoized NoteCards. The card callbacks are
   // stable only if their identity survives unrelated Home re-renders, so they
@@ -65,17 +70,95 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     setLoading(true)
     try {
       const data = await api.getItems()
-      setItems(data)
+      if (hydratedFromCacheRef.current) {
+        const dirtyIds = new Set(
+          (await getDirtyItems()).map((record) => record.id),
+        )
+        setItems((current) => {
+          if (current.length === 0) return data
+          const byId = new Map(current.map((item) => [item.id, item]))
+          const merged: NoteItem[] = data.map((item) => {
+            const local = byId.get(item.id)
+            byId.delete(item.id)
+            return local && dirtyIds.has(item.id) ? local : item
+          })
+          const localOnly = [...byId.values()].sort((a, b) =>
+            compareNoteItems(a, b),
+          )
+          const result = [...localOnly, ...merged]
+          return result
+        })
+      } else {
+        setItems(data)
+      }
       setError(null)
+      void cacheActiveItems(data)
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to load items.')
+      console.log('[DEBUG] refreshItems: API FAILED', error)
+      if (!hydratedFromCacheRef.current) {
+        setError(error instanceof Error ? error.message : 'Failed to load items.')
+      }
     } finally {
       setLoading(false)
     }
   }, [])
 
+  // Phase 3: when a queued CREATE is acknowledged, the engine reconciles
+  // the durable record to the canonical server id and notifies this listener
+  // so the React item keys/ids follow the durable records. This is the ONLY
+  // engine-to-UI event; the local store is not a reactive rendering system.
   useEffect(() => {
-    void refreshItems()
+    setCanonicalizationListener((canonical, previousLocalId) => {
+      console.log('[DEBUG] canonicalization:', previousLocalId, '->', canonical.id, 'ct:', canonical.createdAt)
+      setItems((current) => {
+        const idx = current.findIndex((item) => item.id === previousLocalId)
+        if (idx !== -1) {
+          const next = [...current]
+          // Replace in place — same grid slot, same stable clientId key, so
+          // AnimatePresence never unmounts/remounts this card (no jump).
+          next[idx] = canonical
+          return next
+        }
+        if (current.some((item) => item.id === canonical.id)) return current
+        // Not in the active list: the item was soft-deleted (or permanently
+        // deleted) locally before its CREATE synced. Replacing the durable
+        // record is correct, but it must NOT re-enter the active list — that
+        // would resurrect a deleted item as a ghost card until refresh.
+        return current
+      })
+    })
+    return () => setCanonicalizationListener(null)
+  }, [])
+
+
+  // Phase 1C — offline-first hydration: cached items (the previously synced
+  // server snapshot) populate the list BEFORE the network round-trip, so a
+  // previously-logged-in user sees their notes immediately, even with the
+  // network down. The server refresh then runs exactly as before and stays
+  // authoritative whenever reachable (Phase 1D).
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const cached = await loadCachedActiveItems()
+        console.log('[DEBUG] hydration: cached', cached.length, 'items:', cached.map(i => ({id: i.id, ct: i.createdAt, title: i.title})))
+        if (cancelled) return
+        if (cached.length > 0) {
+          hydratedFromCacheRef.current = true
+          setItems(cached)
+          setLoading(false)
+        }
+      } catch (error) {
+        console.warn('[home] Hydrating cached items failed:', error)
+      }
+      if (!cancelled) {
+        void refreshItems()
+        void syncNow()
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [refreshItems])
 
   const visibleItems = useMemo(() => {
@@ -101,79 +184,20 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     content: string,
     type: ItemType,
   ) {
-    const tempId = createTempItemId()
-    const optimisticItem: NoteItem = {
-      id: tempId,
-      title,
-      content,
-      type,
-      completed: false,
-    }
-
-    // Add the item to the UI immediately and close the composer; the POST runs
-    // in the background and replaces the temporary item with the server item.
-    pendingCreates.current.set(tempId, optimisticItem)
-    setItems((current) => [optimisticItem, ...current])
+    // Local-first: the composer closes immediately and the item is persisted
+    // (record + CREATE op) in ONE IndexedDB transaction before the UI updates;
+    // the background drain replays the op when the server is reachable.
     setComposerOpen(false)
 
     try {
-      const newItem = await api.createItem({ title, content, type })
-
-      if (cancelledCreates.current.has(tempId)) {
-        // The user deleted the pending item before the server confirmed the
-        // create — drop the optimistic copy and clean up the server-side orphan.
-        pendingCreates.current.delete(tempId)
-        cancelledCreates.current.delete(tempId)
-        void api.deleteItem(newItem.id).catch(() => {
-          // Best-effort cleanup; the item is already gone from the UI.
-        })
-        return
-      }
-
-      const local = pendingCreates.current.get(tempId)
-      pendingCreates.current.delete(tempId)
-
-      // Replace the temporary item with the canonical server item. If the user
-      // toggled completion while the POST was in flight, keep their newer local
-      // intent and sync it to the server so the toggle is not lost.
-      const reconciled =
-        local && local.completed !== newItem.completed
-          ? { ...newItem, completed: local.completed }
-          : newItem
-
-      setItems((current) => {
-        const index = current.findIndex((item) => item.id === tempId)
-        if (index === -1) {
-          // Temp item is gone (e.g. a refresh raced the POST) — prepend the
-          // confirmed item, matching the pre-optimistic behavior.
-          return [reconciled, ...current]
-        }
-        const next = [...current]
-        next[index] = reconciled
-        return next
-      })
-
-      if (reconciled !== newItem) {
-        void api
-          .updateItem(newItem.id, { completed: reconciled.completed })
-          .catch((error) => {
-            setError(
-              error instanceof Error ? error.message : 'Failed to update item.',
-            )
-          })
-      }
+      const created = await createItemLocalFirst({ title, content, type })
+      console.log('[DEBUG] handleCreate: created', {id: created.id, ct: created.createdAt, clientId: created.clientId})
+      setItems((current) => [created, ...current])
       setError(null)
     } catch (error) {
-      pendingCreates.current.delete(tempId)
-      setItems((current) => current.filter((item) => item.id !== tempId))
-      // If the user already removed the pending item there is nothing to roll
-      // back, so surface the error only for uncancelled creates.
-      if (!cancelledCreates.current.has(tempId)) {
-        setError(
-          error instanceof Error ? error.message : 'Failed to create item.',
-        )
-      }
-      cancelledCreates.current.delete(tempId)
+      setError(
+        error instanceof Error ? error.message : 'Failed to create item.',
+      )
     }
   }
 
@@ -184,51 +208,22 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   ) {
     if (!editingItem) return
 
-    // Capture the item before the optimistic update for rollback.
-    const previous = itemsRef.current.find(
-      (item) => item.id === editingItem.id,
-    )
     const editId = editingItem.id
-    const editVersion = editVersions.current.get(editId) ?? 0
-    editVersions.current.set(editId, editVersion + 1)
-
-    // Apply the edit optimistically: update the card immediately.
-    setItems((current) =>
-      current.map((item) =>
-        item.id === editId
-          ? { ...item, title, content, type }
-          : item,
-      ),
-    )
-
-    // Close the modal immediately — no waiting for the server.
     setComposerOpen(false)
     setEditingItem(null)
 
     try {
-      await api.updateItem(editId, { title, content, type })
-      // Success: keep the optimistic state.
-      setError(null)
-    } catch (error) {
-      // Only rollback if no newer edit supersedes this one.
-      const isLatest = editVersions.current.get(editId) === editVersion + 1
-      if (isLatest) {
-        editVersions.current.delete(editId)
-        // Restore the previous item if it still exists in the list
-        // (it may have been deleted or replaced since).
-        if (previous) {
-          setItems((current) => {
-            const idx = current.findIndex((item) => item.id === editId)
-            if (idx === -1) return current
-            const next = [...current]
-            next[idx] = previous
-            return next
-          })
-        }
-        setError(
-          error instanceof Error ? error.message : 'Failed to update item.',
+      const updated = await updateItemLocalFirst(editId, { title, content, type })
+      if (updated) {
+        setItems((current) =>
+          current.map((item) => (item.id === editId ? updated : item)),
         )
+        setError(null)
       }
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : 'Failed to update item.',
+      )
     }
   }
 
@@ -237,22 +232,10 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   // identity stays constant and an unrelated Home re-render (search typing,
   // filter change, another item's mutation) never invalidates the cards.
   const handleDelete = useCallback(async (id: string) => {
-    if (isTempId(id)) {
-      // Cancel a pending create: the item has no server id yet, so removing it
-      // locally is the whole operation. The create handler reconciles the server
-      // once the POST settles (cleanup delete on success, no error on failure).
-      pendingCreates.current.delete(id)
-      cancelledCreates.current.add(id)
-      setItems((current) => current.filter((item) => item.id !== id))
-      setError(null)
-      return
-    }
-
-    // Guard against duplicate DELETE calls for the same item while one is in flight.
+    // Dedupe double-clicks while a delete is being committed.
     if (pendingDeleteIds.current.has(id)) return
     pendingDeleteIds.current.add(id)
 
-    // Capture the item and its position before removing it, for rollback.
     const currentItems = itemsRef.current
     const index = currentItems.findIndex((item) => item.id === id)
     if (index === -1) {
@@ -261,14 +244,15 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     }
     const previous = currentItems[index]
 
-    // Remove it from the UI immediately; the DELETE runs in the background.
-    setItems((current) => current.filter((item) => item.id !== id))
-
     try {
-      await api.deleteItem(id)
+      // Local-first soft delete: record + SOFT-DELETE op commit atomically,
+      // the card leaves the grid, and the drain reaches the server later.
+      await softDeleteItemLocalFirst(id)
+      setItems((current) => current.filter((item) => item.id !== id))
       setError(null)
-    } catch (deleteError) {
-      // Restore the item to its previous position/state.
+    } catch (error) {
+      // Only an IndexedDB failure reaches here (network failures never roll
+      // back a local-first action) — restore as a best effort.
       setItems((current) => {
         if (current.some((item) => item.id === id)) return current
         const next = [...current]
@@ -276,78 +260,33 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
         return next
       })
       setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : 'Failed to delete item.',
+        error instanceof Error ? error.message : 'Failed to delete item.',
       )
     } finally {
       pendingDeleteIds.current.delete(id)
     }
   }, [])
 
+  // Stable mutation callback for the memoized NoteCards (see handleDelete).
   const handleToggle = useCallback(async (id: string) => {
-    if (isTempId(id)) {
-      // Pending create: flip the card instantly and record the local intent so
-      // it survives the server response, but never PATCH a client-only id.
-      const pending = pendingCreates.current.get(id)
-      setItems((currentItems) =>
-        currentItems.map((item) =>
-          item.id === id ? { ...item, completed: !item.completed } : item,
-        ),
-      )
-      if (pending) {
-        pendingCreates.current.set(id, {
-          ...pending,
-          completed: !pending.completed,
-        })
-      }
-      setError(null)
-      return
-    }
-
     const current = itemsRef.current.find((item) => item.id === id)
     if (!current) return
     const target = !current.completed
 
-    // Ignore a redundant click while a request for the same target is pending;
-    // a "toggle back" supersedes the in-flight request instead (latest wins).
-    if (toggleTargets.current.get(id) === target) return
-    toggleTargets.current.set(id, target)
-
-    // Apply the new completed state immediately; the PATCH runs in the background.
-    setItems((currentItems) =>
-      currentItems.map((item) =>
-        item.id === id && item.completed !== target
-          ? { ...item, completed: target }
-          : item,
-      ),
-    )
-
+    // Absolute-state toggle persisted local-first; the TOGGLE op reaches the
+    // server in the background and is idempotent by construction (no deltas).
     try {
-      const updatedItem = await api.updateItem(id, { completed: target })
-      const isLatest = toggleTargets.current.get(id) === target
-      if (isLatest) toggleTargets.current.delete(id)
-
-      setItems((currentItems) =>
-        currentItems.map((item) =>
-          item.id === id && isLatest ? { ...item, ...updatedItem } : item,
-        ),
-      )
-      if (isLatest) setError(null)
-    } catch (error) {
-      const isLatest = toggleTargets.current.get(id) === target
-      if (isLatest) toggleTargets.current.delete(id)
-
-      setItems((currentItems) =>
-        currentItems.map((item) =>
-          item.id === id && isLatest ? { ...item, completed: !target } : item,
-        ),
-      )
-      if (isLatest) {
-        setError(
-          error instanceof Error ? error.message : 'Failed to update item.',
+      const updated = await toggleItemLocalFirst(id, target)
+      if (updated) {
+        setItems((currentItems) =>
+          currentItems.map((item) => (item.id === id ? updated : item)),
         )
+        setError(null)
       }
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : 'Failed to update item.',
+      )
     }
   }, [])
 
@@ -374,7 +313,8 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     }
   }
 
-  const handleRestoreItem = useCallback((restored: NoteItem) => {
+  const handleRestoreItem = useCallback(async (restored: NoteItem) => {
+    const createSeqMap = await getCreateOpSeqMap()
     setItems((current) => {
       const idx = current.findIndex((item) => item.id === restored.id)
       if (idx !== -1) {
@@ -383,14 +323,10 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
         next[idx] = restored
         return next
       }
-      // Insert in creation-date order (newest first).
-      const createdAt = restored.createdAt
-        ? new Date(restored.createdAt).getTime()
-        : 0
-      const insertAt = current.findIndex((item) => {
-        const t = item.createdAt ? new Date(item.createdAt).getTime() : 0
-        return t < createdAt
-      })
+      // Insert using the exact same ordering semantics as cache hydration (compareNoteItems with syncQueue seq).
+      const insertAt = current.findIndex(
+        (item) => compareNoteItems(restored, item, createSeqMap) < 0,
+      )
       const next = [...current]
       next.splice(insertAt === -1 ? next.length : insertAt, 0, restored)
       return next
@@ -398,6 +334,15 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   }, [])
 
   async function handleLogout() {
+    // Phase 3: never silently discard unsynced local mutations. With a
+    // non-empty queue the user is asked to reconnect first (an explicit
+    // discard flow is a later-phase concern).
+    if (await hasPendingSyncOperations()) {
+      setError(
+        'You have unsynced changes. Reconnect to sync before logging out.',
+      )
+      return
+    }
     try {
       await api.logout()
       onLogout()
@@ -439,7 +384,10 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
         </div>
       )}
 
-      {loading ? (
+      {/* The skeleton shows only when there is nothing to render yet. Once
+          items exist (cached or server), a background refresh updates the
+          grid in place instead of flashing skeletons over live content. */}
+      {loading && items.length === 0 ? (
         <section className="notes-grid" aria-busy="true" aria-label="Loading items">
           <NoteCardSkeleton />
           <NoteCardSkeleton />
@@ -451,7 +399,7 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
             <AnimatePresence mode="popLayout">
               {visibleItems.map((item) => (
                 <NoteCard
-                  key={item.id}
+                  key={item.clientId ?? `server-${item.id}`}
                   item={item}
                   onDelete={handleDelete}
                   onToggleTask={handleToggle}
