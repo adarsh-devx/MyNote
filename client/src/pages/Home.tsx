@@ -140,9 +140,9 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     return () => setRemoteChangeListener(null)
   }, [refreshItems])
 
-  // Focus & visibility refresh: when the tab/window regains focus or becomes
-  // visible, pull server items so changes made on another device appear
-  // automatically. Throttled to avoid back-to-back fetches on rapid focus events.
+  // Focus, visibility & reconnection refresh: when the tab/window regains
+  // focus, becomes visible, or reconnects online, pull server items so changes
+  // made on another device appear automatically.
   useEffect(() => {
     let lastRefreshAt = 0
     const REFRESH_THROTTLE_MS = 5_000 // at most once every 5 s
@@ -155,11 +155,19 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
       void refreshItems()
     }
 
+    function onOnline() {
+      // Reconnected: pull authoritative server items immediately without throttle
+      lastRefreshAt = Date.now()
+      void refreshItems()
+    }
+
     document.addEventListener('visibilitychange', onFocusOrVisible)
     window.addEventListener('focus', onFocusOrVisible)
+    window.addEventListener('online', onOnline)
     return () => {
       document.removeEventListener('visibilitychange', onFocusOrVisible)
       window.removeEventListener('focus', onFocusOrVisible)
+      window.removeEventListener('online', onOnline)
     }
   }, [refreshItems])
 
