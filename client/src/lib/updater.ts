@@ -21,7 +21,7 @@ export async function checkForAppUpdates(): Promise<AppUpdateInfo> {
     const { relaunch } = await import('@tauri-apps/plugin-process')
 
     const update = await check()
-    if (update && update.available) {
+    if (update) {
       return {
         available: true,
         version: update.version,
