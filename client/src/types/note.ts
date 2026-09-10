@@ -10,6 +10,7 @@ export interface NoteItem {
   pinned?: boolean
   color?: NoteColor
   tags?: string[]
+  order?: number
   notificationState?: 'pending' | 'delivered'
   deletedAt?: string | null
   createdAt?: string

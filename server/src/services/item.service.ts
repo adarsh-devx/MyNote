@@ -6,9 +6,13 @@ import type { CreateItemInput, UpdateItemInput } from '../types/item.js'
  * the server (never from the client) and scopes all queries by it.
  */
 
-/** Active items only (deletedAt is null). */
+/** Active items only (deletedAt is null). Auto-purges items trashed > 30 days ago. */
 export async function getItems(userId: string): Promise<Item[]> {
-  return ItemModel.find({ userId, deletedAt: null }).sort({ createdAt: -1 }).lean()
+  // Opportunistic auto-purge of items in trash older than 30 days
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  void ItemModel.deleteMany({ userId, deletedAt: { $ne: null, $lt: thirtyDaysAgo } }).catch(() => {})
+
+  return ItemModel.find({ userId, deletedAt: null }).sort({ pinned: -1, order: 1, createdAt: -1 }).lean()
 }
 
 export async function createItem(
@@ -129,6 +133,12 @@ export async function permanentDeleteItem(
 ): Promise<boolean> {
   const result = await ItemModel.deleteOne({ _id: itemId, userId })
   return result.deletedCount > 0
+}
+
+/** Permanently delete ALL soft-deleted items in trash for the current user. */
+export async function emptyTrash(userId: string): Promise<number> {
+  const result = await ItemModel.deleteMany({ userId, deletedAt: { $ne: null } })
+  return result.deletedCount
 }
 
 /** Count of pending task notifications for the user (privacy-safe: count only).

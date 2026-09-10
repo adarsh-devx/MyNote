@@ -1630,4 +1630,103 @@ button { cursor: pointer; }
   box-shadow: 1px 1px 0 #111;
 }
 
+/* Phase 3: Drag & Drop Card Reordering */
+.reorder-item {
+  position: relative;
+  list-style: none;
+  user-select: none;
+  touch-action: pan-y;
+}
+
+.card-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  cursor: grab;
+  padding: 2px 4px 2px 0;
+  border-radius: 4px;
+  transition: color 0.1s ease, transform 0.1s ease;
+}
+
+.card-drag-handle:hover {
+  color: #111;
+  transform: scale(1.1);
+}
+
+.card-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Phase 3: Search Shortcut Badge */
+.search-shortcut-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Phase 3: Empty Trash Button */
+.empty-trash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ef4444;
+  background: #fff;
+  border: 1.5px solid #ef4444;
+  box-shadow: 2px 2px 0 #ef4444;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+}
+
+.empty-trash-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 #ef4444;
+  background: #fef2f2;
+}
+
+.empty-trash-btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #ef4444;
+}
+
+.empty-trash-btn.confirm {
+  color: #fff;
+  background: #ef4444;
+  border-color: #ef4444;
+  box-shadow: 2px 2px 0 #991b1b;
+}
+
+.empty-trash-btn.confirm:hover {
+  background: #dc2626;
+  box-shadow: 3px 3px 0 #991b1b;
+}
+
+.empty-trash-btn.cancel {
+  color: #666;
+  background: #fff;
+  border-color: #666;
+  box-shadow: 2px 2px 0 #666;
+}
+
+.empty-trash-btn.cancel:hover {
+  background: #f9fafb;
+}
+
+
 

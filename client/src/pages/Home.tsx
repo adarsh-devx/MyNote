@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, Reorder } from 'framer-motion'
 import { Brand } from '../components/Brand'
 import { SearchBar } from '../components/SearchBar'
 import { ProfileMenu } from '../components/ProfileMenu'
@@ -18,6 +18,7 @@ import {
 import { getDirtyItems, hasPendingSyncOperations } from '../lib/db'
 import {
   createItemLocalFirst,
+  reorderItemsLocalFirst,
   softDeleteItemLocalFirst,
   toggleItemLocalFirst,
   togglePinItemLocalFirst,
@@ -288,6 +289,17 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
       return matchesQuery && matchesFilter && matchesTag
     })
   }, [items, query, filter, selectedTag])
+
+  const isCustomView = Boolean(query.trim() || filter !== 'all' || selectedTag)
+
+  const handleReorder = useCallback(async (newOrder: NoteItem[]) => {
+    setItems(newOrder)
+    try {
+      await reorderItemsLocalFirst(newOrder)
+    } catch (err) {
+      console.error('Failed to save reorder:', err)
+    }
+  }, [])
 
   async function handleCreate(
     title: string,
@@ -586,7 +598,7 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
           <NoteCardSkeleton />
           <NoteCardSkeleton />
         </section>
-      ) : (
+      ) : isCustomView ? (
         <>
           <section className="notes-grid">
             <AnimatePresence mode="popLayout">
@@ -598,12 +610,45 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
                   onToggleTask={handleToggle}
                   onTogglePin={handleTogglePin}
                   onEdit={openEditor}
+                  isDraggable={false}
                 />
               ))}
             </AnimatePresence>
           </section>
 
           {visibleItems.length === 0 && <EmptyState />}
+        </>
+      ) : (
+        <>
+          <Reorder.Group
+            as="section"
+            axis="y"
+            values={items}
+            onReorder={handleReorder}
+            className="notes-grid"
+          >
+            <AnimatePresence mode="popLayout">
+              {items.map((item) => (
+                <Reorder.Item
+                  as="div"
+                  key={item.clientId ?? `server-${item.id}`}
+                  value={item}
+                  className="reorder-item"
+                >
+                  <NoteCard
+                    item={item}
+                    onDelete={handleDelete}
+                    onToggleTask={handleToggle}
+                    onTogglePin={handleTogglePin}
+                    onEdit={openEditor}
+                    isDraggable={true}
+                  />
+                </Reorder.Item>
+              ))}
+            </AnimatePresence>
+          </Reorder.Group>
+
+          {items.length === 0 && <EmptyState />}
         </>
       )}
 

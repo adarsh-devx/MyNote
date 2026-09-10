@@ -46,6 +46,7 @@ export interface LocalItem {
   pinned?: boolean
   color?: NoteColor
   tags?: string[]
+  order?: number
   /**
    * Server-side notification lifecycle ('pending' | 'delivered'); preserved
    * on pull so the existing Tauri notification flow keeps working unchanged.
@@ -86,6 +87,7 @@ export interface UpdateOperationPayload {
   pinned?: boolean
   color?: NoteColor
   tags?: string[]
+  order?: number
 }
 
 /** Absolute completed value (not a delta), so replay is idempotent. */

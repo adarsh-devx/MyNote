@@ -15,6 +15,7 @@ function toItemDTO(item: Item): ItemDTO {
     pinned: item.pinned ?? false,
     color: (item.color as any) ?? 'default',
     tags: item.tags ?? [],
+    order: item.order ?? 0,
     notificationState: item.notificationState,
     deletedAt: item.deletedAt?.toISOString() ?? null,
     createdAt: item.createdAt?.toISOString() ?? null,
@@ -146,6 +147,20 @@ export async function permanentDeleteItem(
       return
     }
     res.json({ message: 'Item permanently deleted.' })
+  } catch (error) {
+    next(error)
+  }
+}
+
+/** Permanently delete all soft-deleted items (empty trash). */
+export async function emptyTrash(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const count = await itemService.emptyTrash(getCurrentUserId(req))
+    res.json({ message: 'Trash emptied successfully.', count })
   } catch (error) {
     next(error)
   }

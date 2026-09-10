@@ -5,6 +5,7 @@ import { useFocusTrap } from '../hooks/useFocusTrap'
 import * as api from '../lib/api'
 import { cacheDeletedItems, loadCachedDeletedItems } from '../lib/authCache'
 import {
+  emptyTrashLocalFirst,
   permanentDeleteItemLocalFirst,
   restoreItemLocalFirst,
 } from '../lib/store'
@@ -39,6 +40,7 @@ export function DeletedModal({ onClose, onRestore }: DeletedModalProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false)
 
   // Keeps keyboard focus inside the dialog and restores it to the trigger
   // when the modal closes.
@@ -160,6 +162,19 @@ export function DeletedModal({ onClose, onRestore }: DeletedModalProps) {
     [items],
   )
 
+  async function handleEmptyTrash() {
+    setConfirmEmptyTrash(false)
+    setItems([])
+    try {
+      await emptyTrashLocalFirst()
+      if (isOnline()) {
+        void api.emptyTrash().catch(() => {})
+      }
+    } catch {
+      setError('Failed to empty trash.')
+    }
+  }
+
   return (
     <motion.div
       className="modal-backdrop"
@@ -182,19 +197,53 @@ export function DeletedModal({ onClose, onRestore }: DeletedModalProps) {
         transition={{ duration: 0.15 }}
       >
         {/* Header */}
-        <div className="profile-modal-top">
-          <button
-            className="profile-back-button"
-            onClick={onClose}
-            aria-label="Back"
-            type="button"
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h2 className="profile-modal-title">Deleted</h2>
-            <p className="deleted-subtitle">Items you've deleted</p>
+        <div className="profile-modal-top" style={{ justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              className="profile-back-button"
+              onClick={onClose}
+              aria-label="Back"
+              type="button"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h2 className="profile-modal-title">Deleted</h2>
+              <p className="deleted-subtitle">Items you've deleted</p>
+            </div>
           </div>
+          {items.length > 0 && (
+            <div>
+              {confirmEmptyTrash ? (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    className="empty-trash-btn confirm"
+                    onClick={handleEmptyTrash}
+                  >
+                    Confirm Empty
+                  </button>
+                  <button
+                    type="button"
+                    className="empty-trash-btn cancel"
+                    onClick={() => setConfirmEmptyTrash(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="empty-trash-btn"
+                  onClick={() => setConfirmEmptyTrash(true)}
+                  title="Empty entire trash"
+                >
+                  <Trash2 size={13} />
+                  Empty Trash
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Error */}

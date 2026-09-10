@@ -80,6 +80,9 @@ export function parseCreateItemBody(body: unknown): ParseResult<CreateItemInput>
       .slice(0, 10)
   }
 
+  const rawOrder = data.order
+  const order = typeof rawOrder === 'number' ? rawOrder : 0
+
   return {
     data: {
       title: title.trim(),
@@ -88,6 +91,7 @@ export function parseCreateItemBody(body: unknown): ParseResult<CreateItemInput>
       pinned,
       color: color as any,
       tags,
+      order,
       ...(clientRequestId !== undefined ? { clientRequestId } : {}),
     },
   }
@@ -159,6 +163,13 @@ export function parseUpdateItemBody(body: unknown): ParseResult<UpdateItemInput>
       .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
       .map((t) => t.trim().toLowerCase().replace(/^#+/, ''))
       .slice(0, 10)
+  }
+
+  if (data.order !== undefined) {
+    if (typeof data.order !== 'number') {
+      return { error: 'Order must be a number.' }
+    }
+    update.order = data.order
   }
 
   if (Object.keys(update).length === 0) {

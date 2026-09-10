@@ -74,6 +74,7 @@ export function noteItemToLocalItem(
     pinned: item.pinned ?? false,
     color: item.color ?? 'default',
     tags: item.tags ?? [],
+    order: item.order ?? 0,
     ...(item.notificationState !== undefined
       ? { notificationState: item.notificationState }
       : {}),
@@ -95,6 +96,7 @@ export function localItemToNoteItem(local: LocalItem): NoteItem {
     pinned: local.pinned ?? false,
     color: local.color ?? 'default',
     tags: local.tags ?? [],
+    order: local.order ?? 0,
     // Stable render-key identity: survives the local-id → server-id flip at
     // canonicalization, so the React card is never remounted by a sync event.
     clientId: local.clientId,
@@ -184,18 +186,54 @@ function mergeServerItem(
  * @param dirtyIds     — Set of local item ids with pending queued operations
  * @param filterFn     — which local items this snapshot governs (active vs. deleted)
  */
+/**
+ * Field-level conflict resolution:
+ * When a local item has queued offline mutations (dirty === true), merge
+ * non-conflicting fields from the server instead of dropping the server update.
+ */
+export function mergeFieldLevelItem(
+  local: LocalItem,
+  server: NoteItem,
+  dirtyFields: Set<string>,
+): LocalItem {
+  return {
+    ...local,
+    // If local mutation touched title, keep local; else take server title
+    title: dirtyFields.has('title') ? local.title : server.title,
+    content: dirtyFields.has('content') ? local.content : server.content,
+    type: dirtyFields.has('type') ? local.type : server.type,
+    completed: dirtyFields.has('completed') ? local.completed : server.completed,
+    pinned: dirtyFields.has('pinned') ? local.pinned : (server.pinned ?? false),
+    color: dirtyFields.has('color') ? local.color : (server.color ?? 'default'),
+    tags: dirtyFields.has('tags') ? local.tags : (server.tags ?? []),
+    order: dirtyFields.has('order') ? local.order : (server.order ?? 0),
+    deletedAt: dirtyFields.has('deletedAt') ? local.deletedAt : (server.deletedAt ?? null),
+    updatedAt: server.updatedAt ?? local.updatedAt,
+    createdAt: server.createdAt ?? local.createdAt,
+    dirty: true,
+  }
+}
+
 function mergeServerSnapshot(
   serverItems: readonly NoteItem[],
   existingMap: Map<string, LocalItem>,
   dirtyIds: Set<string>,
   filterFn: (record: LocalItem) => boolean,
+  queuedOpsByItemId?: Map<string, Set<string>>,
 ): { upserts: LocalItem[]; staleIds: string[] } {
   const serverIds = new Set(serverItems.map((item) => item.id))
 
-  // Upsert server items that are NOT dirty locally.
-  const upserts = serverItems
-    .filter((item) => !dirtyIds.has(item.id))
-    .map((item) => mergeServerItem(existingMap.get(item.id), item))
+  const upserts: LocalItem[] = []
+  for (const item of serverItems) {
+    const existing = existingMap.get(item.id)
+    if (dirtyIds.has(item.id) && existing) {
+      // Smart field-level merge for dirty items
+      const dirtyFields = queuedOpsByItemId?.get(item.id) ?? new Set()
+      upserts.push(mergeFieldLevelItem(existing, item, dirtyFields))
+    } else {
+      upserts.push(mergeServerItem(existing, item))
+    }
+  }
 
   // Evict local items that this snapshot governs but the server no longer
   // reports — UNLESS they are dirty (pending local operations).
@@ -368,6 +406,15 @@ export function compareNoteItems(
   const bPinned = Boolean(b.pinned)
   if (aPinned !== bPinned) {
     return aPinned ? -1 : 1
+  }
+
+  // 2. Custom manual drag order: if both have different non-zero order indices
+  const aOrder = a.order ?? 0
+  const bOrder = b.order ?? 0
+  if (aOrder !== 0 || bOrder !== 0) {
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder
+    }
   }
 
   const aIsLocal = !a.createdAt

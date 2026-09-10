@@ -389,3 +389,103 @@ export async function permanentDeleteItemLocalFirst(id: string): Promise<void> {
 
   void syncNow()
 }
+
+/**
+ * Reorder items locally and persist order updates to the write-ahead sync queue.
+ */
+export async function reorderItemsLocalFirst(
+  reorderedItems: NoteItem[],
+): Promise<NoteItem[]> {
+  const updatedList: NoteItem[] = []
+
+  await withTransaction([STORE_ITEMS, STORE_SYNC_QUEUE], 'readwrite', async (tx) => {
+    const itemsStore = tx.store(STORE_ITEMS)
+    const queueStore = tx.store(STORE_SYNC_QUEUE)
+
+    for (let index = 0; index < reorderedItems.length; index++) {
+      const item = reorderedItems[index]
+      const newOrder = index + 1
+
+      let local = (await tx.request(itemsStore.get(item.id))) as
+        | LocalItem
+        | undefined
+
+      if (!local) {
+        local = noteItemToLocalItem(item)
+      }
+
+      if (local.order === newOrder) {
+        updatedList.push(localItemToNoteItem(local))
+        continue
+      }
+
+      const next: LocalItem = { ...local, order: newOrder, dirty: true }
+      const op: NewSyncQueueItem = {
+        opId: crypto.randomUUID(),
+        type: 'update',
+        itemId: item.id,
+        payload: { order: newOrder },
+        createdAt: nowIso(),
+        attempts: 0,
+      }
+
+      await tx.request(itemsStore.put(next))
+      await tx.request(queueStore.add(op))
+      updatedList.push(localItemToNoteItem(next))
+    }
+  })
+
+  void syncNow()
+  return updatedList
+}
+
+/**
+ * Empty trash: permanently delete all soft-deleted items locally and enqueue sync ops.
+ */
+export async function emptyTrashLocalFirst(): Promise<void> {
+  await withTransaction([STORE_ITEMS, STORE_SYNC_QUEUE], 'readwrite', async (tx) => {
+    const itemsStore = tx.store(STORE_ITEMS)
+    const queueStore = tx.store(STORE_SYNC_QUEUE)
+
+    const allRecords = (await tx.request(itemsStore.getAll())) as LocalItem[]
+    const deletedRecords = allRecords.filter((rec) => rec.deletedAt !== null)
+
+    for (const rec of deletedRecords) {
+      const queued = (await tx.request(
+        queueStore.index('by_itemId').getAll(rec.id),
+      )) as SyncQueueItem[]
+
+      const hasPendingCreate = queued.some((op) => op.type === 'create')
+      if (hasPendingCreate) {
+        await tx.request(itemsStore.delete(rec.id))
+        for (const op of queued) {
+          await tx.request(queueStore.delete(op.seq))
+        }
+        continue
+      }
+
+      await tx.request(itemsStore.delete(rec.id))
+      let hasPermanentDelete = false
+      for (const op of queued) {
+        if (op.type === 'permanent-delete') {
+          hasPermanentDelete = true
+        } else {
+          await tx.request(queueStore.delete(op.seq))
+        }
+      }
+      if (!hasPermanentDelete) {
+        const op: NewSyncQueueItem = {
+          opId: crypto.randomUUID(),
+          type: 'permanent-delete',
+          itemId: rec.id,
+          payload: {},
+          createdAt: nowIso(),
+          attempts: 0,
+        }
+        await tx.request(queueStore.add(op))
+      }
+    }
+  })
+
+  void syncNow()
+}

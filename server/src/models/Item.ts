@@ -11,6 +11,7 @@ export interface Item {
   pinned: boolean
   color: string
   tags: string[]
+  order: number
   notificationState: NotificationState
   deletedAt: Date | null
   createdAt: Date
@@ -65,6 +66,10 @@ const itemSchema = new Schema<Item>(
     tags: {
       type: [String],
       default: [],
+    },
+    order: {
+      type: Number,
+      default: 0,
     },
     notificationState: {
       type: String,

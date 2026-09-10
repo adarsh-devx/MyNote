@@ -98,6 +98,7 @@ export function updateItem(
     pinned?: boolean
     color?: NoteColor
     tags?: string[]
+    order?: number
   },
 ): Promise<NoteItem> {
   return request<NoteItem>(`/items/${id}`, {
@@ -122,6 +123,12 @@ export function restoreItem(id: string): Promise<NoteItem> {
 
 export function permanentDeleteItem(id: string): Promise<void> {
   return request<void>(`/items/${id}/permanent`, { method: 'DELETE' }, [404])
+}
+
+export function emptyTrash(): Promise<{ message: string; count: number }> {
+  return request<{ message: string; count: number }>('/items/deleted/all', {
+    method: 'DELETE',
+  })
 }
 
 // Auth functions

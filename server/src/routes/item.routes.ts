@@ -2,6 +2,7 @@ import { Router } from 'express'
 import {
   createItem,
   deleteItem,
+  emptyTrash,
   getDeletedItems,
   getItems,
   getPendingNotifications,
@@ -22,6 +23,7 @@ const router = Router()
 
 router.get('/', requireAuth, apiRateLimiter, getItems)
 router.get('/deleted', requireAuth, apiRateLimiter, getDeletedItems)
+router.delete('/deleted/all', requireAuth, apiRateLimiter, emptyTrash)
 router.post('/', requireAuth, apiRateLimiter, validateCreateItem, createItem)
 router.patch('/:id', requireAuth, apiRateLimiter, validateItemIdParam, validateUpdateItem, updateItem)
 router.patch('/:id/restore', requireAuth, apiRateLimiter, validateItemIdParam, restoreItem)

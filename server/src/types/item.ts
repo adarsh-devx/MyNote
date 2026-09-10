@@ -21,6 +21,7 @@ export interface CreateItemInput {
   pinned?: boolean
   color?: NoteColor
   tags?: string[]
+  order?: number
   clientRequestId?: string
 }
 
@@ -33,6 +34,7 @@ export interface UpdateItemInput {
   pinned?: boolean
   color?: NoteColor
   tags?: string[]
+  order?: number
 }
 
 /** Shape returned by all item endpoints (identical to the Phase 2 response). */
@@ -45,6 +47,7 @@ export interface ItemDTO {
   pinned?: boolean
   color?: NoteColor
   tags?: string[]
+  order?: number
   notificationState: NotificationState
   deletedAt: string | null
   createdAt: string | null

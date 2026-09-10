@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Pencil, Pin, Trash2 } from 'lucide-react'
+import { GripVertical, Pencil, Pin, Trash2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { MarkdownContent } from './MarkdownContent'
 import type { NoteItem } from '../types/note'
@@ -10,6 +10,7 @@ interface NoteCardProps {
   onToggleTask: (id: string) => void
   onTogglePin?: (id: string) => void
   onEdit: (item: NoteItem) => void
+  isDraggable?: boolean
 }
 
 // Memoized NoteCard: Home keeps every prop reference stable (the same `item`
@@ -22,6 +23,7 @@ export const NoteCard = memo(function NoteCard({
   onToggleTask,
   onTogglePin,
   onEdit,
+  isDraggable = false,
 }: NoteCardProps) {
   const colorClass = item.color && item.color !== 'default' ? `note-color-${item.color}` : ''
 
@@ -35,6 +37,11 @@ export const NoteCard = memo(function NoteCard({
     >
       <div className="card-top">
         <div className="card-top-left">
+          {isDraggable && (
+            <span className="card-drag-handle" title="Drag to reorder note">
+              <GripVertical size={13} />
+            </span>
+          )}
           <span className={item.type === 'task' ? 'pill task' : 'pill note'}>
             {item.type === 'task' ? 'TASK' : 'NOTE'}
           </span>
