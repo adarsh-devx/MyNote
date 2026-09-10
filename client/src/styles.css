@@ -146,16 +146,35 @@ button { cursor: pointer; }
 .filters {
   display: flex;
   gap: 8px;
-  margin: 28px 0 18px;
-  flex-wrap: wrap;
+  margin: 28px 0 16px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 2px 8px;
   min-width: 0;
+}
+
+.filters::-webkit-scrollbar {
+  display: none;
 }
 
 .filter {
   border: 0;
   background: transparent;
-  padding: 8px 12px;
+  padding: 8px 14px;
   color: #666;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 4px;
+  transition: all 0.12s ease;
+}
+
+.filter:hover:not(.active) {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .filter.active {
@@ -163,6 +182,75 @@ button { cursor: pointer; }
   background: #111;
   color: #fff;
   box-shadow: 3px 3px 0 #aaa;
+}
+
+/* Tag filter bar */
+.tag-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 18px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 2px 6px;
+  min-width: 0;
+}
+
+.tag-filter-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.tag-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #777;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tag-filter-chip {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1.5px solid #111;
+  background: #fff;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.1s ease;
+}
+
+.tag-filter-chip:hover {
+  background: #fef08a;
+}
+
+.tag-filter-chip.active {
+  background: #111;
+  color: #fff;
+  box-shadow: 2px 2px 0 #888;
+}
+
+.tag-filter-clear {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px dashed #666;
+  background: transparent;
+  color: #666;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tag-filter-clear:hover {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #991b1b;
 }
 
 .notes-grid {
@@ -334,8 +422,15 @@ button { cursor: pointer; }
 .modal-header {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
+  align-items: flex-start;
+  gap: 16px;
   min-width: 0;
+}
+
+.modal-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .type-switch {
@@ -469,8 +564,138 @@ button { cursor: pointer; }
   .search-mobile-clear:hover { background: #fff9b8; }
   .search-mobile-clear:focus-visible { outline: 2px solid #111; outline-offset: 2px; }
 
-  .hero-copy { margin-top: 55px; }
-  .notes-grid { grid-template-columns: 1fr; }
+  .hero-copy { margin: 38px 0 20px; }
+  .hero-copy h1 { font-size: clamp(36px, 8.5vw, 48px); }
+
+  .filters {
+    margin: 18px 0 12px;
+    gap: 6px;
+  }
+
+  .filter {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .tag-filter-bar {
+    margin: 0 0 14px;
+    gap: 5px;
+  }
+
+  .tag-filter-chip {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  .notes-grid { grid-template-columns: 1fr; gap: 14px; }
+  .note-card { padding: 16px; min-height: 160px; box-shadow: 4px 4px 0 #111; }
+  .note-card h2 { margin: 16px 0 6px; font-size: 24px; }
+
+  /* Mobile Modal refinements */
+  .modal-backdrop {
+    padding: 12px;
+  }
+
+  .composer-modal {
+    padding: 16px;
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    box-shadow: 5px 5px 0 #111;
+  }
+
+  .modal-header {
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .modal-header h2 {
+    font-size: clamp(24px, 6.5vw, 30px);
+    line-height: 1.1;
+  }
+
+  .modal-header-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .modal-header-actions .icon-button {
+    width: 36px;
+    height: 36px;
+    box-shadow: 2px 2px 0 #111;
+  }
+
+  .type-switch {
+    margin: 14px 0 10px;
+    gap: 6px;
+  }
+
+  .type-switch button {
+    padding: 6px 12px;
+    font-size: 13px;
+  }
+
+  .title-input {
+    font-size: 22px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+
+  .composer-modal textarea {
+    padding: 10px 12px;
+    font-size: 14px;
+    min-height: 110px;
+  }
+
+  .formatting-toolbar {
+    padding: 4px;
+    gap: 2px;
+  }
+
+  .format-btn {
+    padding: 4px 6px;
+  }
+
+  .composer-tags-section {
+    margin-top: 8px;
+    gap: 4px;
+  }
+
+  .tag-text-input {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .tag-add-btn {
+    padding: 5px 8px;
+  }
+
+  .composer-color-picker {
+    margin-top: 10px;
+    padding-top: 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .color-label {
+    font-size: 12px;
+  }
+
+  .color-swatches {
+    gap: 6px;
+  }
+
+  .color-swatch {
+    width: 20px;
+    height: 20px;
+  }
+
+  .save-button {
+    margin-top: 12px;
+    padding: 11px;
+    font-size: 14px;
+    box-shadow: 3px 3px 0 #aaa;
+  }
 }
 
 /* Phase 2: status and card action helpers */
