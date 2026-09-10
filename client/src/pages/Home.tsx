@@ -72,40 +72,39 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     itemsRef.current = items
   }, [items])
 
-  const refreshItems = useCallback(async () => {
-    setLoading(true)
+  const refreshItems = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const data = await api.getItems()
-      if (hydratedFromCacheRef.current) {
-        const dirtyIds = new Set(
-          (await getDirtyItems()).map((record) => record.id),
-        )
-        setItems((current) => {
-          if (current.length === 0) return data
-          const byId = new Map(current.map((item) => [item.id, item]))
-          const merged: NoteItem[] = data.map((item) => {
-            const local = byId.get(item.id)
-            byId.delete(item.id)
-            return local && dirtyIds.has(item.id) ? local : item
-          })
-          const localOnly = [...byId.values()].sort((a, b) =>
-            compareNoteItems(a, b),
-          )
-          const result = [...localOnly, ...merged]
-          return result
+      const dirtyIds = new Set(
+        (await getDirtyItems()).map((record) => record.id),
+      )
+      setItems((current) => {
+        if (current.length === 0) {
+          return [...data].sort((a, b) => compareNoteItems(a, b))
+        }
+        const byId = new Map(current.map((item) => [item.id, item]))
+        const merged: NoteItem[] = data.map((item) => {
+          const local = byId.get(item.id)
+          byId.delete(item.id)
+          return local && dirtyIds.has(item.id) ? local : item
         })
-      } else {
-        setItems(data)
-      }
+        const localOnly = [...byId.values()].filter((item) =>
+          dirtyIds.has(item.id),
+        )
+        const result = [...localOnly, ...merged].sort((a, b) =>
+          compareNoteItems(a, b),
+        )
+        return result
+      })
       setError(null)
       void cacheActiveItems(data)
     } catch (error) {
-      console.log('[DEBUG] refreshItems: API FAILED', error)
-      if (!hydratedFromCacheRef.current) {
+      if (!hydratedFromCacheRef.current && !silent) {
         setError(error instanceof Error ? error.message : 'Failed to load items.')
       }
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
@@ -141,8 +140,21 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   // tick as the desktop toast.
   useEffect(() => {
     if (!isTauri()) return
-    setRemoteChangeListener(() => void refreshItems())
+    setRemoteChangeListener(() => void refreshItems(true))
     return () => setRemoteChangeListener(null)
+  }, [refreshItems])
+
+  // Live cross-device real-time sync poller: pulls authoritative server items
+  // every 3.5 seconds whenever tab/window is visible so actions on another device
+  // (e.g. phone -> desktop or desktop -> phone) sync seamlessly in real-time.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshItems(true)
+        void syncNow()
+      }
+    }, 3500)
+    return () => clearInterval(timer)
   }, [refreshItems])
 
   // Focus, visibility & reconnection refresh: when the tab/window regains
@@ -150,20 +162,21 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   // made on another device appear automatically.
   useEffect(() => {
     let lastRefreshAt = 0
-    const REFRESH_THROTTLE_MS = 5_000 // at most once every 5 s
+    const REFRESH_THROTTLE_MS = 3_000
 
     function onFocusOrVisible() {
       if (document.visibilityState !== 'visible') return
       const now = Date.now()
       if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return
       lastRefreshAt = now
-      void refreshItems()
+      void refreshItems(true)
     }
 
     function onOnline() {
       // Reconnected: pull authoritative server items immediately without throttle
       lastRefreshAt = Date.now()
-      void refreshItems()
+      void refreshItems(true)
+      void syncNow()
     }
 
     document.addEventListener('visibilitychange', onFocusOrVisible)
