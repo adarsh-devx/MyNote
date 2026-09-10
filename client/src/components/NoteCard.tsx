@@ -11,6 +11,14 @@ interface NoteCardProps {
   onTogglePin?: (id: string) => void
   onEdit: (item: NoteItem) => void
   isDraggable?: boolean
+  isDragging?: boolean
+  isDragOver?: boolean
+  onDragStart?: (e: React.DragEvent) => void
+  onDragEnd?: (e: React.DragEvent) => void
+  onDragOver?: (e: React.DragEvent) => void
+  onDragEnter?: (e: React.DragEvent) => void
+  onDragLeave?: (e: React.DragEvent) => void
+  onDrop?: (e: React.DragEvent) => void
 }
 
 // Memoized NoteCard: Home keeps every prop reference stable (the same `item`
@@ -24,6 +32,14 @@ export const NoteCard = memo(function NoteCard({
   onTogglePin,
   onEdit,
   isDraggable = false,
+  isDragging = false,
+  isDragOver = false,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragEnter,
+  onDragLeave,
+  onDrop,
 }: NoteCardProps) {
   const colorClass = item.color && item.color !== 'default' ? `note-color-${item.color}` : ''
 
@@ -33,7 +49,14 @@ export const NoteCard = memo(function NoteCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
-      className={`note-card ${item.completed ? 'completed' : ''} ${item.pinned ? 'pinned' : ''} ${colorClass}`.trim()}
+      draggable={isDraggable}
+      onDragStartCapture={onDragStart}
+      onDragEndCapture={onDragEnd}
+      onDragOver={onDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={`note-card ${item.completed ? 'completed' : ''} ${item.pinned ? 'pinned' : ''} ${isDragging ? 'is-dragging' : ''} ${isDragOver ? 'is-drag-over' : ''} ${colorClass}`.trim()}
     >
       <div className="card-top">
         <div className="card-top-left">

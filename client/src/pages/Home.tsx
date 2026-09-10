@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, Reorder } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { Brand } from '../components/Brand'
 import { SearchBar } from '../components/SearchBar'
 import { ProfileMenu } from '../components/ProfileMenu'
@@ -292,14 +292,70 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
 
   const isCustomView = Boolean(query.trim() || filter !== 'all' || selectedTag)
 
-  const handleReorder = useCallback(async (newOrder: NoteItem[]) => {
-    setItems(newOrder)
-    try {
-      await reorderItemsLocalFirst(newOrder)
-    } catch (err) {
-      console.error('Failed to save reorder:', err)
-    }
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  const handleDragStart = useCallback(
+    (index: number) => (e: React.DragEvent) => {
+      if (isCustomView) return
+      setDraggedIndex(index)
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', `${index}`)
+    },
+    [isCustomView],
+  )
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedIndex(null)
+    setDragOverIndex(null)
   }, [])
+
+  const handleDragOver = useCallback(
+    (index: number) => (e: React.DragEvent) => {
+      if (isCustomView || draggedIndex === null) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      if (dragOverIndex !== index) {
+        setDragOverIndex(index)
+      }
+    },
+    [isCustomView, draggedIndex, dragOverIndex],
+  )
+
+  const handleDragLeave = useCallback(
+    (index: number) => () => {
+      if (dragOverIndex === index) {
+        setDragOverIndex(null)
+      }
+    },
+    [dragOverIndex],
+  )
+
+  const handleDrop = useCallback(
+    (targetIndex: number) => async (e: React.DragEvent) => {
+      e.preventDefault()
+      if (isCustomView || draggedIndex === null || draggedIndex === targetIndex) {
+        setDraggedIndex(null)
+        setDragOverIndex(null)
+        return
+      }
+
+      const current = [...itemsRef.current]
+      const [moved] = current.splice(draggedIndex, 1)
+      current.splice(targetIndex, 0, moved)
+
+      setItems(current)
+      setDraggedIndex(null)
+      setDragOverIndex(null)
+
+      try {
+        await reorderItemsLocalFirst(current)
+      } catch (err) {
+        console.error('Failed to save reorder:', err)
+      }
+    },
+    [isCustomView, draggedIndex],
+  )
 
   async function handleCreate(
     title: string,
@@ -598,11 +654,11 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
           <NoteCardSkeleton />
           <NoteCardSkeleton />
         </section>
-      ) : isCustomView ? (
+      ) : (
         <>
           <section className="notes-grid">
             <AnimatePresence mode="popLayout">
-              {visibleItems.map((item) => (
+              {visibleItems.map((item, index) => (
                 <NoteCard
                   key={item.clientId ?? `server-${item.id}`}
                   item={item}
@@ -610,45 +666,20 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
                   onToggleTask={handleToggle}
                   onTogglePin={handleTogglePin}
                   onEdit={openEditor}
-                  isDraggable={false}
+                  isDraggable={!isCustomView}
+                  isDragging={draggedIndex === index}
+                  isDragOver={dragOverIndex === index && draggedIndex !== index}
+                  onDragStart={handleDragStart(index)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={handleDragOver(index)}
+                  onDragLeave={handleDragLeave(index)}
+                  onDrop={handleDrop(index)}
                 />
               ))}
             </AnimatePresence>
           </section>
 
           {visibleItems.length === 0 && <EmptyState />}
-        </>
-      ) : (
-        <>
-          <Reorder.Group
-            as="section"
-            axis="y"
-            values={items}
-            onReorder={handleReorder}
-            className="notes-grid"
-          >
-            <AnimatePresence mode="popLayout">
-              {items.map((item) => (
-                <Reorder.Item
-                  as="div"
-                  key={item.clientId ?? `server-${item.id}`}
-                  value={item}
-                  className="reorder-item"
-                >
-                  <NoteCard
-                    item={item}
-                    onDelete={handleDelete}
-                    onToggleTask={handleToggle}
-                    onTogglePin={handleTogglePin}
-                    onEdit={openEditor}
-                    isDraggable={true}
-                  />
-                </Reorder.Item>
-              ))}
-            </AnimatePresence>
-          </Reorder.Group>
-
-          {items.length === 0 && <EmptyState />}
         </>
       )}
 

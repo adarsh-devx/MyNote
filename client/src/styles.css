@@ -1631,11 +1631,26 @@ button { cursor: pointer; }
 }
 
 /* Phase 3: Drag & Drop Card Reordering */
-.reorder-item {
-  position: relative;
-  list-style: none;
-  user-select: none;
-  touch-action: pan-y;
+.note-card[draggable="true"] {
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.note-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.note-card.is-dragging {
+  opacity: 0.35;
+  border-style: dashed;
+  transform: scale(0.98);
+}
+
+.note-card.is-drag-over {
+  outline: 3px solid #111;
+  outline-offset: 4px;
+  box-shadow: 8px 8px 0 #111;
+  transform: translateY(-3px);
 }
 
 .card-drag-handle {
