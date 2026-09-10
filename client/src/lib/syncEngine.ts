@@ -394,6 +394,9 @@ async function processCreate(
       title: snapshot.title,
       content: snapshot.content,
       type: snapshot.type,
+      pinned: snapshot.pinned,
+      color: snapshot.color,
+      tags: snapshot.tags,
       clientRequestId: op.opId,
     })
     console.log('[DEBUG] processCreate: SUCCESS, server.id=', server.id, 'ct=', server.createdAt)

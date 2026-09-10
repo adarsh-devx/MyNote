@@ -42,6 +42,10 @@ export async function createItem(
       content: data.content,
       type: data.type,
       completed: false,
+      pinned: data.pinned ?? false,
+      color: data.color ?? 'default',
+      tags: data.tags ?? [],
+      order: data.order ?? 0,
       notificationState: 'pending',
       deletedAt: null,
       // Omitted entirely when absent — existing/legacy documents must keep

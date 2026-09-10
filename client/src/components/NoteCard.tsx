@@ -27,10 +27,11 @@ export const NoteCard = memo(function NoteCard({
 
   return (
     <motion.article
-      layout
+      layout="position"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
       className={`note-card ${item.completed ? 'completed' : ''} ${item.pinned ? 'pinned' : ''} ${colorClass}`.trim()}
     >
       <div className="card-top">

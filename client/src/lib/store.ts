@@ -43,6 +43,7 @@ export async function createItemLocalFirst(input: {
   color?: NoteColor
   tags?: string[]
 }): Promise<NoteItem> {
+  const createdAt = nowIso()
   const local: LocalItem = {
     id: `local-${crypto.randomUUID()}`,
     clientId: crypto.randomUUID(),
@@ -54,12 +55,11 @@ export async function createItemLocalFirst(input: {
     color: input.color ?? 'default',
     tags: input.tags ?? [],
     deletedAt: null,
-    createdAt: null,
-    updatedAt: null,
+    createdAt,
+    updatedAt: createdAt,
     serverId: null,
     dirty: true,
   }
-  const createdAt = nowIso()
   const op: NewSyncQueueItem = {
     opId: crypto.randomUUID(),
     type: 'create',

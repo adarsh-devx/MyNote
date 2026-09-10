@@ -76,18 +76,47 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     if (!silent) setLoading(true)
     try {
       const data = await api.getItems()
-      const dirtyIds = new Set(
-        (await getDirtyItems()).map((record) => record.id),
-      )
+      const dirtyRecords = await getDirtyItems()
+      const dirtyIds = new Set(dirtyRecords.map((record) => record.id))
+
       setItems((current) => {
         if (current.length === 0) {
           return [...data].sort((a, b) => compareNoteItems(a, b))
         }
         const byId = new Map(current.map((item) => [item.id, item]))
-        const merged: NoteItem[] = data.map((item) => {
-          const local = byId.get(item.id)
-          byId.delete(item.id)
-          return local && dirtyIds.has(item.id) ? local : item
+        const merged: NoteItem[] = data.map((serverItem) => {
+          let local = byId.get(serverItem.id)
+          if (!local) {
+            // Check if any local item was created with this clientRequestId / matching title & content
+            for (const [id, item] of byId.entries()) {
+              if (id.startsWith('local-')) {
+                local = item
+                byId.delete(id)
+                break
+              }
+            }
+          } else {
+            byId.delete(serverItem.id)
+          }
+
+          if (local) {
+            return {
+              ...serverItem,
+              clientId: local.clientId ?? serverItem.clientId,
+              ...(dirtyIds.has(local.id)
+                ? {
+                    title: local.title,
+                    content: local.content,
+                    type: local.type,
+                    completed: local.completed,
+                    pinned: local.pinned,
+                    color: local.color,
+                    tags: local.tags,
+                  }
+                : {}),
+            }
+          }
+          return serverItem
         })
         const localOnly = [...byId.values()].filter((item) =>
           dirtyIds.has(item.id),
@@ -114,21 +143,23 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   // engine-to-UI event; the local store is not a reactive rendering system.
   useEffect(() => {
     setCanonicalizationListener((canonical, previousLocalId) => {
-      console.log('[DEBUG] canonicalization:', previousLocalId, '->', canonical.id, 'ct:', canonical.createdAt)
       setItems((current) => {
-        const idx = current.findIndex((item) => item.id === previousLocalId)
+        const idx = current.findIndex(
+          (item) =>
+            item.id === previousLocalId ||
+            (canonical.clientId && item.clientId === canonical.clientId),
+        )
         if (idx !== -1) {
           const next = [...current]
           // Replace in place — same grid slot, same stable clientId key, so
           // AnimatePresence never unmounts/remounts this card (no jump).
-          next[idx] = canonical
+          next[idx] = {
+            ...canonical,
+            clientId: current[idx].clientId ?? canonical.clientId,
+          }
           return next
         }
         if (current.some((item) => item.id === canonical.id)) return current
-        // Not in the active list: the item was soft-deleted (or permanently
-        // deleted) locally before its CREATE synced. Replacing the durable
-        // record is correct, but it must NOT re-enter the active list — that
-        // would resurrect a deleted item as a ghost card until refresh.
         return current
       })
     })
@@ -353,7 +384,9 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
         tags,
         pinned,
       })
-      setItems((current) => [created, ...current])
+      setItems((current) =>
+        [...current, created].sort((a, b) => compareNoteItems(a, b)),
+      )
       setError(null)
     } catch (error) {
       setError(
