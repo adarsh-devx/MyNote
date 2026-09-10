@@ -328,11 +328,12 @@ export async function getDeletedItems(): Promise<LocalItem[]> {
 
 /** Items with a queued, unacknowledged sync operation (`dirty === true`). */
 export async function getDirtyItems(): Promise<LocalItem[]> {
-  return withTransaction([STORE_ITEMS], 'readonly', (tx) =>
-    tx.request(
-      tx.store(STORE_ITEMS).index('by_dirty').getAll(IDBKeyRange.only(true)),
-    ) as Promise<LocalItem[]>,
-  )
+  return withTransaction([STORE_ITEMS], 'readonly', async (tx) => {
+    const all = (await tx.request(
+      tx.store(STORE_ITEMS).getAll(),
+    )) as LocalItem[]
+    return all.filter((item) => Boolean(item.dirty))
+  })
 }
 
 // ---------------------------------------------------------------------------
