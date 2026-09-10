@@ -15,7 +15,8 @@ import {
   getCreateOpSeqMap,
   loadCachedActiveItems,
 } from '../lib/authCache'
-import { getDirtyItems, hasPendingSyncOperations } from '../lib/db'
+import { getDirtyItems, getDeletedItems, hasPendingSyncOperations } from '../lib/db'
+import type { LocalItem } from '../lib/syncTypes'
 import {
   createItemLocalFirst,
   softDeleteItemLocalFirst,
@@ -75,16 +76,33 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   const refreshItems = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     try {
-      const data = await api.getItems()
-      const dirtyRecords = await getDirtyItems()
+      const [data, dirtyRecords, deletedRecords] = await Promise.all([
+        api.getItems(),
+        getDirtyItems(),
+        getDeletedItems(),
+      ])
       const dirtyIds = new Set(dirtyRecords.map((record) => record.id))
+      const localDeletedIds = new Set([
+        ...deletedRecords.map((record) => record.id),
+        ...deletedRecords
+          .filter((record) => record.serverId)
+          .map((record) => record.serverId!),
+        ...Array.from(pendingDeleteIds.current),
+      ])
 
       setItems((current) => {
-        if (current.length === 0) {
-          return [...data].sort((a, b) => compareNoteItems(a, b))
+        const activeCurrent = current.filter(
+          (item) => !localDeletedIds.has(item.id),
+        )
+        const activeServerData = data.filter(
+          (item) => !localDeletedIds.has(item.id),
+        )
+
+        if (activeCurrent.length === 0) {
+          return [...activeServerData].sort((a, b) => compareNoteItems(a, b))
         }
-        const byId = new Map(current.map((item) => [item.id, item]))
-        const merged: NoteItem[] = data.map((serverItem) => {
+        const byId = new Map(activeCurrent.map((item) => [item.id, item]))
+        const merged: NoteItem[] = activeServerData.map((serverItem) => {
           let local = byId.get(serverItem.id)
           if (!local) {
             // Check if any local item was created with this clientRequestId / matching title & content
@@ -118,8 +136,8 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
           }
           return serverItem
         })
-        const localOnly = [...byId.values()].filter((item) =>
-          dirtyIds.has(item.id),
+        const localOnly = [...byId.values()].filter(
+          (item) => dirtyIds.has(item.id) && !localDeletedIds.has(item.id),
         )
         const result = [...localOnly, ...merged].sort((a, b) =>
           compareNoteItems(a, b),
@@ -559,6 +577,7 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   }
 
   const handleRestoreItem = useCallback(async (restored: NoteItem) => {
+    pendingDeleteIds.current.delete(restored.id)
     const createSeqMap = await getCreateOpSeqMap()
     setItems((current) => {
       const idx = current.findIndex((item) => item.id === restored.id)
