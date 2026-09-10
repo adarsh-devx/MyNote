@@ -7,6 +7,7 @@ import {
   setNotificationEnabled,
   isTauri,
 } from '../lib/notifications'
+import { checkForAppUpdates, type AppUpdateInfo } from '../lib/updater'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -18,6 +19,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [notificationsOn, setNotificationsOn] = useState(() =>
     isNotificationEnabled(),
   )
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null)
+  const [updateStatusMsg, setUpdateStatusMsg] = useState<string | null>(null)
+  const [installingUpdate, setInstallingUpdate] = useState(false)
 
   // Keeps keyboard focus inside the dialog and restores it to the trigger
   // when the modal closes.
@@ -36,6 +41,36 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     const next = !notificationsOn
     setNotificationsOn(next)
     setNotificationEnabled(next)
+  }
+
+  async function handleCheckUpdate() {
+    if (updateInfo?.available && updateInfo.installAndRelaunch) {
+      setInstallingUpdate(true)
+      setUpdateStatusMsg('Downloading and installing update...')
+      try {
+        await updateInfo.installAndRelaunch()
+      } catch (err) {
+        setInstallingUpdate(false)
+        setUpdateStatusMsg('Failed to install update. Please try again.')
+      }
+      return
+    }
+
+    setCheckingUpdate(true)
+    setUpdateStatusMsg(null)
+    try {
+      const info = await checkForAppUpdates()
+      setUpdateInfo(info)
+      if (info.available) {
+        setUpdateStatusMsg(`New version v${info.version} is ready to install!`)
+      } else {
+        setUpdateStatusMsg("You're on the latest version.")
+      }
+    } catch (err) {
+      setUpdateStatusMsg('Could not check for updates.')
+    } finally {
+      setCheckingUpdate(false)
+    }
   }
 
   const isDesktop = isTauri()
@@ -116,9 +151,28 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </section>
         )}
 
-        {/* About */}
+        {/* Shortcuts */}
         <section className="settings-section">
-          <h3 className="settings-section-title">About</h3>
+          <h3 className="settings-section-title">Shortcuts</h3>
+          <div className="settings-card">
+            <div className="settings-row">
+              <div>
+                <span className="settings-label">Quick Note</span>
+                <p className="settings-hint">
+                  {isDesktop ? 'Global shortcut anywhere on desktop' : 'Keyboard shortcut'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <span className="shortcut-badge">Alt + N</span>
+                {isDesktop && <span className="shortcut-badge">Ctrl + Shift + N</span>}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* About & Updates */}
+        <section className="settings-section">
+          <h3 className="settings-section-title">About & Updates</h3>
           <div className="settings-card">
             <div className="settings-row">
               <div className="settings-row-text">
@@ -128,7 +182,28 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   <p className="settings-hint">Version {APP_VERSION}</p>
                 </div>
               </div>
+              {isDesktop && (
+                <button
+                  type="button"
+                  className="check-update-btn"
+                  disabled={checkingUpdate || installingUpdate}
+                  onClick={handleCheckUpdate}
+                >
+                  {checkingUpdate
+                    ? 'Checking...'
+                    : installingUpdate
+                      ? 'Installing...'
+                      : updateInfo?.available
+                        ? `Update to v${updateInfo.version}`
+                        : 'Check for updates'}
+                </button>
+              )}
             </div>
+            {updateStatusMsg && (
+              <div className="update-status-row">
+                <span className="update-status-text">{updateStatusMsg}</span>
+              </div>
+            )}
           </div>
         </section>
       </motion.div>

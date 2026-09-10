@@ -1,10 +1,11 @@
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 /// The AUMID (Application User Model ID) Windows uses to identify MyNotes
 /// for toast notifications. Must match the `identifier` in tauri.conf.json.
@@ -121,6 +122,8 @@ async fn show_toast(app: AppHandle, title: String, body: String) -> Result<(), S
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // Start with Windows using the official plugin (registry Run key,
         // no scripts). The --autostart flag distinguishes boot launches.
         .plugin(tauri_plugin_autostart::init(
@@ -136,11 +139,26 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        show_main_window(app);
+                        let _ = app.emit("open-quick-note", ());
+                    }
+                })
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![show_toast])
         .setup(|app| {
             // Register the AUMID so Windows recognises MyNotes for toast
             // notifications. This is a no-op on non-Windows platforms.
             register_aumid();
+
+            // Register global shortcut: Ctrl+Shift+N / Cmd+Shift+N
+            if let Ok(shortcut) = "ctrl+shift+n".parse::<Shortcut>() {
+                let _ = app.global_shortcut().register(shortcut);
+            }
 
             // MyNotes is a background-first app: keep autostart enabled so
             // notifications arrive after every Windows restart.

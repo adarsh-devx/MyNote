@@ -25,6 +25,7 @@ import {
 } from '../lib/store'
 import { setCanonicalizationListener, syncNow } from '../lib/syncEngine'
 import { setRemoteChangeListener, isTauri } from '../lib/notifications'
+import { checkForAppUpdates, type AppUpdateInfo } from '../lib/updater'
 import type { ItemFilter, ItemType, NoteColor, NoteItem } from '../types/note'
 import type { User } from '../types/user'
 
@@ -43,10 +44,12 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ItemFilter>('all')
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<NoteItem | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null)
+  const [installingUpdate, setInstallingUpdate] = useState(false)
 
   // In-flight tracking for optimistic mutations. Refs (not state) are used so
   // the guards are read/written synchronously across re-renders, without
@@ -172,6 +175,55 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
       window.removeEventListener('online', onOnline)
     }
   }, [refreshItems])
+
+  // Quick Note shortcut & Tauri global shortcut listener
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Don't trigger when user is typing inside an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea') return
+
+      const isAltN = e.altKey && e.key.toLowerCase() === 'n'
+      const isCtrlShiftN = (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'n'
+      const isAltShiftN = e.altKey && e.shiftKey && e.key.toLowerCase() === 'n'
+
+      if (isAltN || isCtrlShiftN || isAltShiftN) {
+        e.preventDefault()
+        setEditingItem(null)
+        setComposerOpen(true)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
+    let unlistenTauri: (() => void) | undefined
+    if (isTauri()) {
+      void import('@tauri-apps/api/event').then(({ listen }) => {
+        void listen('open-quick-note', () => {
+          setEditingItem(null)
+          setComposerOpen(true)
+        }).then((unlisten) => {
+          unlistenTauri = unlisten
+        })
+      })
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      if (unlistenTauri) unlistenTauri()
+    }
+  }, [])
+
+  // Auto-updater check on startup (desktop only)
+  useEffect(() => {
+    if (!isTauri()) return
+    void checkForAppUpdates()
+      .then((info) => {
+        if (info.available) {
+          setAvailableUpdate(info)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
 
   // Phase 1C — offline-first hydration: cached items (the previously synced
@@ -569,6 +621,33 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
             initialTags={editingItem?.tags}
             initialPinned={editingItem?.pinned}
           />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {availableUpdate && (
+          <div className="update-banner" role="status">
+            <div className="update-banner-info">
+              <strong>Update v{availableUpdate.version} Available!</strong>
+              <p>{availableUpdate.body}</p>
+            </div>
+            <button
+              type="button"
+              className="update-banner-btn"
+              disabled={installingUpdate}
+              onClick={async () => {
+                if (!availableUpdate.installAndRelaunch) return
+                setInstallingUpdate(true)
+                try {
+                  await availableUpdate.installAndRelaunch()
+                } catch {
+                  setInstallingUpdate(false)
+                  setError('Failed to install update. Please try again.')
+                }
+              }}
+            >
+              {installingUpdate ? 'Installing...' : 'Update & Restart'}
+            </button>
+          </div>
         )}
       </AnimatePresence>
     </main>

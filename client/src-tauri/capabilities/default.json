@@ -5,6 +5,9 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "notification:default"
+    "notification:default",
+    "global-shortcut:default",
+    "updater:default",
+    "process:default"
   ]
 }
