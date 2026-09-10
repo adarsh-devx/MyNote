@@ -44,20 +44,34 @@ export const NoteCard = memo(function NoteCard({
   const colorClass = item.color && item.color !== 'default' ? `note-color-${item.color}` : ''
 
   return (
-    <motion.article
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97 }}
+    <div
+      className={`note-card-drag-wrapper ${isDragging ? 'is-dragging' : ''} ${isDragOver ? 'is-drag-over' : ''}`}
       draggable={isDraggable}
-      onDragStartCapture={onDragStart}
-      onDragEndCapture={onDragEnd}
-      onDragOver={onDragOver}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', item.id)
+        onDragStart?.(e)
+      }}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        onDragOver?.(e)
+      }}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      className={`note-card ${item.completed ? 'completed' : ''} ${item.pinned ? 'pinned' : ''} ${isDragging ? 'is-dragging' : ''} ${isDragOver ? 'is-drag-over' : ''} ${colorClass}`.trim()}
+      onDrop={(e) => {
+        e.preventDefault()
+        onDrop?.(e)
+      }}
     >
+      <motion.article
+        layout
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        className={`note-card ${item.completed ? 'completed' : ''} ${item.pinned ? 'pinned' : ''} ${colorClass}`.trim()}
+      >
       <div className="card-top">
         <div className="card-top-left">
           {isDraggable && (
@@ -169,5 +183,6 @@ export const NoteCard = memo(function NoteCard({
         </button>
       )}
     </motion.article>
+    </div>
   )
 })
