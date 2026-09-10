@@ -67,7 +67,7 @@ async function request<T>(
 }
 
 export function getItems(): Promise<NoteItem[]> {
-  return request<NoteItem[]>('/items')
+  return request<NoteItem[]>(`/items?_t=${Date.now()}`, { cache: 'no-store' })
 }
 
 export function createItem(data: {

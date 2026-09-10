@@ -23,6 +23,7 @@ import {
   updateItemLocalFirst,
 } from '../lib/store'
 import { setCanonicalizationListener, syncNow } from '../lib/syncEngine'
+import { setRemoteChangeListener, isTauri } from '../lib/notifications'
 import type { ItemFilter, ItemType, NoteItem } from '../types/note'
 import type { User } from '../types/user'
 
@@ -129,6 +130,38 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     })
     return () => setCanonicalizationListener(null)
   }, [])
+
+  // Tauri path: when the notification poller detects remote tasks (count > 0),
+  // pull the latest server items immediately — the list updates in the same
+  // tick as the desktop toast.
+  useEffect(() => {
+    if (!isTauri()) return
+    setRemoteChangeListener(() => void refreshItems())
+    return () => setRemoteChangeListener(null)
+  }, [refreshItems])
+
+  // Focus & visibility refresh: when the tab/window regains focus or becomes
+  // visible, pull server items so changes made on another device appear
+  // automatically. Throttled to avoid back-to-back fetches on rapid focus events.
+  useEffect(() => {
+    let lastRefreshAt = 0
+    const REFRESH_THROTTLE_MS = 5_000 // at most once every 5 s
+
+    function onFocusOrVisible() {
+      if (document.visibilityState !== 'visible') return
+      const now = Date.now()
+      if (now - lastRefreshAt < REFRESH_THROTTLE_MS) return
+      lastRefreshAt = now
+      void refreshItems()
+    }
+
+    document.addEventListener('visibilitychange', onFocusOrVisible)
+    window.addEventListener('focus', onFocusOrVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onFocusOrVisible)
+      window.removeEventListener('focus', onFocusOrVisible)
+    }
+  }, [refreshItems])
 
 
   // Phase 1C — offline-first hydration: cached items (the previously synced

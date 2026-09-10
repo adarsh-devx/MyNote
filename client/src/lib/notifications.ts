@@ -127,6 +127,17 @@ export function setNotificationEnabled(enabled: boolean): void {
 // polls can never double-fire (which would show duplicate Windows toasts).
 let checkInFlight = false
 
+// ── Remote-change listener ───────────────────────────────────────────────
+// Called when the poller detects that the server has pending items for this
+// user (count > 0). Home registers refreshItems() here so the task list is
+// updated in the same tick that triggers the desktop notification, without
+// any additional polling.
+let remoteChangeListener: (() => void) | null = null
+
+export function setRemoteChangeListener(cb: (() => void) | null): void {
+  remoteChangeListener = cb
+}
+
 // ── Retry / backoff for failed notification attempts ─────────────────────
 // The server contract is count-based (one generic toast for the whole
 // pending set, marked delivered in a single batch), so the retry unit is the
@@ -191,6 +202,11 @@ export async function checkPendingNotifications(): Promise<void> {
       clearNotificationRetry()
       return
     }
+
+    // Remote task(s) detected: notify Home so it pulls the latest server
+    // items. This runs before the toast so the UI updates even if the
+    // notification permission was not granted.
+    remoteChangeListener?.()
 
     // Show notification, then mark as delivered. Delivery is intentionally
     // after a successful display, so pending notifications are never
