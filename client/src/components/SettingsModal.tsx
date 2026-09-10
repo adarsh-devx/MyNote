@@ -2,18 +2,15 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, Bell, Info } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useFocusTrap } from '../hooks/useFocusTrap'
-import {
-  isNotificationEnabled,
-  setNotificationEnabled,
-  isTauri,
-} from '../lib/notifications'
+import { isNotificationEnabled, setNotificationEnabled, isTauri } from '../lib/notifications'
 import { checkForAppUpdates, type AppUpdateInfo } from '../lib/updater'
+import pkg from '../../package.json'
 
 interface SettingsModalProps {
   onClose: () => void
 }
 
-const APP_VERSION = '0.1.0'
+const APP_VERSION = pkg.version
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const [notificationsOn, setNotificationsOn] = useState(() =>
