@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { GripVertical, Pencil, Pin, Trash2 } from 'lucide-react'
+import { Pencil, Pin, Trash2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { MarkdownContent } from './MarkdownContent'
 import type { NoteItem } from '../types/note'
@@ -10,15 +10,6 @@ interface NoteCardProps {
   onToggleTask: (id: string) => void
   onTogglePin?: (id: string) => void
   onEdit: (item: NoteItem) => void
-  isDraggable?: boolean
-  isDragging?: boolean
-  isDragOver?: boolean
-  onDragStart?: (e: React.DragEvent) => void
-  onDragEnd?: (e: React.DragEvent) => void
-  onDragOver?: (e: React.DragEvent) => void
-  onDragEnter?: (e: React.DragEvent) => void
-  onDragLeave?: (e: React.DragEvent) => void
-  onDrop?: (e: React.DragEvent) => void
 }
 
 // Memoized NoteCard: Home keeps every prop reference stable (the same `item`
@@ -31,54 +22,19 @@ export const NoteCard = memo(function NoteCard({
   onToggleTask,
   onTogglePin,
   onEdit,
-  isDraggable = false,
-  isDragging = false,
-  isDragOver = false,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragEnter,
-  onDragLeave,
-  onDrop,
 }: NoteCardProps) {
   const colorClass = item.color && item.color !== 'default' ? `note-color-${item.color}` : ''
 
   return (
-    <div
-      className={`note-card-drag-wrapper ${isDragging ? 'is-dragging' : ''} ${isDragOver ? 'is-drag-over' : ''}`}
-      draggable={isDraggable}
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'move'
-        e.dataTransfer.setData('text/plain', item.id)
-        onDragStart?.(e)
-      }}
-      onDragEnd={onDragEnd}
-      onDragOver={(e) => {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'move'
-        onDragOver?.(e)
-      }}
-      onDragEnter={onDragEnter}
-      onDragLeave={onDragLeave}
-      onDrop={(e) => {
-        e.preventDefault()
-        onDrop?.(e)
-      }}
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      className={`note-card ${item.completed ? 'completed' : ''} ${item.pinned ? 'pinned' : ''} ${colorClass}`.trim()}
     >
-      <motion.article
-        layout
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        className={`note-card ${item.completed ? 'completed' : ''} ${item.pinned ? 'pinned' : ''} ${colorClass}`.trim()}
-      >
       <div className="card-top">
         <div className="card-top-left">
-          {isDraggable && (
-            <span className="card-drag-handle" title="Drag to reorder note">
-              <GripVertical size={13} />
-            </span>
-          )}
           <span className={item.type === 'task' ? 'pill task' : 'pill note'}>
             {item.type === 'task' ? 'TASK' : 'NOTE'}
           </span>
@@ -183,6 +139,5 @@ export const NoteCard = memo(function NoteCard({
         </button>
       )}
     </motion.article>
-    </div>
   )
 })

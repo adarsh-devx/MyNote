@@ -1630,60 +1630,6 @@ button { cursor: pointer; }
   box-shadow: 1px 1px 0 #111;
 }
 
-/* Phase 3: Drag & Drop Card Reordering */
-.note-card-drag-wrapper {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.note-card-drag-wrapper[draggable="true"] {
-  cursor: grab;
-  -webkit-user-drag: element;
-  user-select: none;
-}
-
-.note-card-drag-wrapper[draggable="true"]:active {
-  cursor: grabbing;
-}
-
-.note-card-drag-wrapper.is-dragging {
-  opacity: 0.35;
-}
-
-.note-card-drag-wrapper.is-dragging .note-card {
-  border-style: dashed;
-}
-
-.note-card-drag-wrapper.is-drag-over .note-card {
-  outline: 3px solid #111;
-  outline-offset: 4px;
-  box-shadow: 8px 8px 0 #111;
-  transform: translateY(-3px);
-}
-
-.card-drag-handle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #888;
-  cursor: grab;
-  padding: 2px 4px 2px 0;
-  border-radius: 4px;
-  transition: color 0.1s ease, transform 0.1s ease;
-}
-
-.card-drag-handle:hover {
-  color: #111;
-  transform: scale(1.1);
-}
-
-.card-drag-handle:active {
-  cursor: grabbing;
-}
-
 /* Phase 3: Search Shortcut Badge */
 .search-shortcut-hint {
   display: inline-flex;

@@ -18,7 +18,6 @@ import {
 import { getDirtyItems, hasPendingSyncOperations } from '../lib/db'
 import {
   createItemLocalFirst,
-  reorderItemsLocalFirst,
   softDeleteItemLocalFirst,
   toggleItemLocalFirst,
   togglePinItemLocalFirst,
@@ -289,73 +288,6 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
       return matchesQuery && matchesFilter && matchesTag
     })
   }, [items, query, filter, selectedTag])
-
-  const isCustomView = Boolean(query.trim() || filter !== 'all' || selectedTag)
-
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-
-  const handleDragStart = useCallback(
-    (index: number) => (e: React.DragEvent) => {
-      if (isCustomView) return
-      setDraggedIndex(index)
-      e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/plain', `${index}`)
-    },
-    [isCustomView],
-  )
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedIndex(null)
-    setDragOverIndex(null)
-  }, [])
-
-  const handleDragOver = useCallback(
-    (index: number) => (e: React.DragEvent) => {
-      if (isCustomView || draggedIndex === null) return
-      e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
-      if (dragOverIndex !== index) {
-        setDragOverIndex(index)
-      }
-    },
-    [isCustomView, draggedIndex, dragOverIndex],
-  )
-
-  const handleDragLeave = useCallback(
-    (index: number) => () => {
-      if (dragOverIndex === index) {
-        setDragOverIndex(null)
-      }
-    },
-    [dragOverIndex],
-  )
-
-  const handleDrop = useCallback(
-    (targetIndex: number) => async (e: React.DragEvent) => {
-      e.preventDefault()
-      if (isCustomView || draggedIndex === null || draggedIndex === targetIndex) {
-        setDraggedIndex(null)
-        setDragOverIndex(null)
-        return
-      }
-
-      const current = [...itemsRef.current]
-      const [moved] = current.splice(draggedIndex, 1)
-      current.splice(targetIndex, 0, moved)
-
-      setItems(current)
-      setDraggedIndex(null)
-      setDragOverIndex(null)
-
-      try {
-        await reorderItemsLocalFirst(current)
-      } catch (err) {
-        console.error('Failed to save reorder:', err)
-      }
-    },
-    [isCustomView, draggedIndex],
-  )
 
   async function handleCreate(
     title: string,
@@ -658,7 +590,7 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
         <>
           <section className="notes-grid">
             <AnimatePresence mode="popLayout">
-              {visibleItems.map((item, index) => (
+              {visibleItems.map((item) => (
                 <NoteCard
                   key={item.clientId ?? `server-${item.id}`}
                   item={item}
@@ -666,14 +598,6 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
                   onToggleTask={handleToggle}
                   onTogglePin={handleTogglePin}
                   onEdit={openEditor}
-                  isDraggable={!isCustomView}
-                  isDragging={draggedIndex === index}
-                  isDragOver={dragOverIndex === index && draggedIndex !== index}
-                  onDragStart={handleDragStart(index)}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={handleDragOver(index)}
-                  onDragLeave={handleDragLeave(index)}
-                  onDrop={handleDrop(index)}
                 />
               ))}
             </AnimatePresence>
