@@ -8,6 +8,9 @@ export interface Item {
   content: string
   type: ItemType
   completed: boolean
+  pinned: boolean
+  color: string
+  tags: string[]
   notificationState: NotificationState
   deletedAt: Date | null
   createdAt: Date
@@ -50,6 +53,18 @@ const itemSchema = new Schema<Item>(
     completed: {
       type: Boolean,
       default: false,
+    },
+    pinned: {
+      type: Boolean,
+      default: false,
+    },
+    color: {
+      type: String,
+      default: 'default',
+    },
+    tags: {
+      type: [String],
+      default: [],
     },
     notificationState: {
       type: String,

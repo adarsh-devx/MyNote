@@ -3,10 +3,10 @@ import {
   STORE_ITEMS,
   STORE_SYNC_QUEUE,
 } from './db'
-import { localItemToNoteItem } from './authCache'
+import { localItemToNoteItem, noteItemToLocalItem } from './authCache'
 import { syncNow } from './syncEngine'
 import type { LocalItem, NewSyncQueueItem, SyncQueueItem } from './syncTypes'
-import type { ItemType, NoteItem } from '../types/note'
+import type { ItemType, NoteColor, NoteItem } from '../types/note'
 
 /**
  * Phase 3 local-first mutation layer.
@@ -39,6 +39,9 @@ export async function createItemLocalFirst(input: {
   title: string
   content: string
   type: ItemType
+  pinned?: boolean
+  color?: NoteColor
+  tags?: string[]
 }): Promise<NoteItem> {
   const local: LocalItem = {
     id: `local-${crypto.randomUUID()}`,
@@ -47,6 +50,9 @@ export async function createItemLocalFirst(input: {
     content: input.content,
     type: input.type,
     completed: false,
+    pinned: input.pinned ?? false,
+    color: input.color ?? 'default',
+    tags: input.tags ?? [],
     deletedAt: null,
     createdAt: null,
     updatedAt: null,
@@ -73,14 +79,21 @@ export async function createItemLocalFirst(input: {
 }
 
 /**
- * Apply an edit (title/content/type) and persist the UPDATE operation.
+ * Apply an edit (title/content/type/color/tags/pinned) and persist the UPDATE operation.
  * Absolute field values, matching the API's PATCH semantics. Returns the
  * updated item, or undefined when the item is no longer in the local store
  * (e.g. it was permanently deleted meanwhile) — the caller should drop it.
  */
 export async function updateItemLocalFirst(
   id: string,
-  patch: { title: string; content: string; type: ItemType },
+  patch: {
+    title: string
+    content: string
+    type: ItemType
+    pinned?: boolean
+    color?: NoteColor
+    tags?: string[]
+  },
 ): Promise<NoteItem | undefined> {
   const updated = await withTransaction(
     [STORE_ITEMS, STORE_SYNC_QUEUE],
@@ -97,6 +110,9 @@ export async function updateItemLocalFirst(
         title: patch.title,
         content: patch.content,
         type: patch.type,
+        ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
+        ...(patch.color !== undefined ? { color: patch.color } : {}),
+        ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
         dirty: true,
       }
       const op: NewSyncQueueItem = {
@@ -107,6 +123,9 @@ export async function updateItemLocalFirst(
           title: patch.title,
           content: patch.content,
           type: patch.type,
+          pinned: next.pinned,
+          color: next.color,
+          tags: next.tags,
         },
         createdAt: nowIso(),
         attempts: 0,
@@ -159,6 +178,51 @@ export async function toggleItemLocalFirst(
   if (updated) void syncNow()
   return updated ? localItemToNoteItem(updated) : undefined
 }
+
+/**
+ * Toggle pin status and persist the UPDATE/PIN operation.
+ */
+export async function togglePinItemLocalFirst(
+  id: string,
+  pinned: boolean,
+  fallbackItem?: NoteItem,
+): Promise<NoteItem | undefined> {
+  const updated = await withTransaction(
+    [STORE_ITEMS, STORE_SYNC_QUEUE],
+    'readwrite',
+    async (tx) => {
+      const itemsStore = tx.store(STORE_ITEMS)
+      let local = (await tx.request(itemsStore.get(id))) as
+        | LocalItem
+        | undefined
+
+      if (!local && fallbackItem) {
+        local = noteItemToLocalItem(fallbackItem)
+      } else if (!local) {
+        return undefined
+      }
+
+      if (Boolean(local.pinned) === pinned) return local
+
+      const next: LocalItem = { ...local, pinned, dirty: true }
+      const op: NewSyncQueueItem = {
+        opId: crypto.randomUUID(),
+        type: 'update',
+        itemId: id,
+        payload: { pinned },
+        createdAt: nowIso(),
+        attempts: 0,
+      }
+      await tx.request(itemsStore.put(next))
+      await tx.request(tx.store(STORE_SYNC_QUEUE).add(op))
+      return next
+    },
+  )
+
+  if (updated) void syncNow()
+  return updated ? localItemToNoteItem(updated) : undefined
+}
+
 /**
  * Soft-delete an item: set `deletedAt` locally (it leaves the active list and
  * becomes available in the trash) and persist the SOFT-DELETE operation. The

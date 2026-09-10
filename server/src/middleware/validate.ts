@@ -64,11 +64,30 @@ export function parseCreateItemBody(body: unknown): ParseResult<CreateItemInput>
     clientRequestId = trimmedId.toLowerCase()
   }
 
+  const rawPinned = data.pinned
+  const pinned = typeof rawPinned === 'boolean' ? rawPinned : false
+
+  const rawColor = data.color
+  const validColors = ['default', 'yellow', 'coral', 'mint', 'sky', 'lavender']
+  const color = typeof rawColor === 'string' && validColors.includes(rawColor) ? rawColor : 'default'
+
+  const rawTags = data.tags
+  let tags: string[] = []
+  if (Array.isArray(rawTags)) {
+    tags = rawTags
+      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+      .map((t) => t.trim().toLowerCase().replace(/^#+/, ''))
+      .slice(0, 10)
+  }
+
   return {
     data: {
       title: title.trim(),
       content: content.trim(),
       type: type as ItemType,
+      pinned,
+      color: color as any,
+      tags,
       ...(clientRequestId !== undefined ? { clientRequestId } : {}),
     },
   }
@@ -115,6 +134,31 @@ export function parseUpdateItemBody(body: unknown): ParseResult<UpdateItemInput>
       return { error: 'Completed must be a boolean.' }
     }
     update.completed = data.completed
+  }
+
+  if (data.pinned !== undefined) {
+    if (typeof data.pinned !== 'boolean') {
+      return { error: 'Pinned must be a boolean.' }
+    }
+    update.pinned = data.pinned
+  }
+
+  if (data.color !== undefined) {
+    const validColors = ['default', 'yellow', 'coral', 'mint', 'sky', 'lavender']
+    if (typeof data.color !== 'string' || !validColors.includes(data.color)) {
+      return { error: 'Color is invalid.' }
+    }
+    update.color = data.color as any
+  }
+
+  if (data.tags !== undefined) {
+    if (!Array.isArray(data.tags)) {
+      return { error: 'Tags must be an array of strings.' }
+    }
+    update.tags = data.tags
+      .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+      .map((t) => t.trim().toLowerCase().replace(/^#+/, ''))
+      .slice(0, 10)
   }
 
   if (Object.keys(update).length === 0) {

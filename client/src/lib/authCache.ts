@@ -71,6 +71,9 @@ export function noteItemToLocalItem(
     content: item.content,
     type: item.type,
     completed: item.completed,
+    pinned: item.pinned ?? false,
+    color: item.color ?? 'default',
+    tags: item.tags ?? [],
     ...(item.notificationState !== undefined
       ? { notificationState: item.notificationState }
       : {}),
@@ -89,6 +92,9 @@ export function localItemToNoteItem(local: LocalItem): NoteItem {
     content: local.content,
     type: local.type,
     completed: local.completed,
+    pinned: local.pinned ?? false,
+    color: local.color ?? 'default',
+    tags: local.tags ?? [],
     // Stable render-key identity: survives the local-id → server-id flip at
     // canonicalization, so the React card is never remounted by a sync event.
     clientId: local.clientId,
@@ -347,15 +353,23 @@ export async function getCreateOpSeqMap(): Promise<Map<string, number>> {
 
 /**
  * Unified comparator for NoteItems:
- * 1. Offline items (!createdAt) always sort above server items (createdAt).
- * 2. Multiple offline items sort by their syncQueue create op sequence (seq desc, newest first).
- * 3. Multiple server items sort by createdAt desc.
+ * 1. Pinned items always sort above non-pinned items.
+ * 2. Offline items (!createdAt) sort above server items (createdAt).
+ * 3. Multiple offline items sort by their syncQueue create op sequence (seq desc, newest first).
+ * 4. Multiple server items sort by createdAt desc.
  */
 export function compareNoteItems(
   a: NoteItem,
   b: NoteItem,
   createSeqByItemId?: Map<string, number>,
 ): number {
+  // 1. Pin priority: pinned notes appear first
+  const aPinned = Boolean(a.pinned)
+  const bPinned = Boolean(b.pinned)
+  if (aPinned !== bPinned) {
+    return aPinned ? -1 : 1
+  }
+
   const aIsLocal = !a.createdAt
   const bIsLocal = !b.createdAt
 

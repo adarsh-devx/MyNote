@@ -20,11 +20,12 @@ import {
   createItemLocalFirst,
   softDeleteItemLocalFirst,
   toggleItemLocalFirst,
+  togglePinItemLocalFirst,
   updateItemLocalFirst,
 } from '../lib/store'
 import { setCanonicalizationListener, syncNow } from '../lib/syncEngine'
 import { setRemoteChangeListener, isTauri } from '../lib/notifications'
-import type { ItemFilter, ItemType, NoteItem } from '../types/note'
+import type { ItemFilter, ItemType, NoteColor, NoteItem } from '../types/note'
 import type { User } from '../types/user'
 
 interface HomeProps {
@@ -41,6 +42,7 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
   const [items, setItems] = useState<NoteItem[]>([])
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ItemFilter>('all')
+  const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
@@ -202,37 +204,58 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     }
   }, [refreshItems])
 
+  // Extract all unique tags across items for quick filtering chips
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>()
+    items.forEach((item) => {
+      if (item.tags) {
+        item.tags.forEach((t) => tagSet.add(t))
+      }
+    })
+    return Array.from(tagSet).sort()
+  }, [items])
+
   const visibleItems = useMemo(() => {
     const search = query.trim().toLowerCase()
 
     return items.filter((item) => {
       const matchesQuery =
         item.title.toLowerCase().includes(search) ||
-        item.content.toLowerCase().includes(search)
+        item.content.toLowerCase().includes(search) ||
+        (item.tags && item.tags.some((t) => t.toLowerCase().includes(search.replace(/^#/, ''))))
 
       const matchesFilter =
         filter === 'all' ||
         (filter === 'tasks' && item.type === 'task') ||
         (filter === 'notes' && item.type === 'note') ||
-        (filter === 'completed' && item.completed)
+        (filter === 'completed' && item.completed) ||
+        (filter === 'pinned' && item.pinned)
 
-      return matchesQuery && matchesFilter
+      const matchesTag = !selectedTag || (item.tags && item.tags.includes(selectedTag))
+
+      return matchesQuery && matchesFilter && matchesTag
     })
-  }, [items, query, filter])
+  }, [items, query, filter, selectedTag])
 
   async function handleCreate(
     title: string,
     content: string,
     type: ItemType,
+    color?: NoteColor,
+    tags?: string[],
+    pinned?: boolean,
   ) {
-    // Local-first: the composer closes immediately and the item is persisted
-    // (record + CREATE op) in ONE IndexedDB transaction before the UI updates;
-    // the background drain replays the op when the server is reachable.
     setComposerOpen(false)
 
     try {
-      const created = await createItemLocalFirst({ title, content, type })
-      console.log('[DEBUG] handleCreate: created', {id: created.id, ct: created.createdAt, clientId: created.clientId})
+      const created = await createItemLocalFirst({
+        title,
+        content,
+        type,
+        color,
+        tags,
+        pinned,
+      })
       setItems((current) => [created, ...current])
       setError(null)
     } catch (error) {
@@ -246,6 +269,9 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     title: string,
     content: string,
     type: ItemType,
+    color?: NoteColor,
+    tags?: string[],
+    pinned?: boolean,
   ) {
     if (!editingItem) return
 
@@ -254,7 +280,14 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     setEditingItem(null)
 
     try {
-      const updated = await updateItemLocalFirst(editId, { title, content, type })
+      const updated = await updateItemLocalFirst(editId, {
+        title,
+        content,
+        type,
+        color,
+        tags,
+        pinned,
+      })
       if (updated) {
         setItems((current) =>
           current.map((item) => (item.id === editId ? updated : item)),
@@ -331,6 +364,40 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     }
   }, [])
 
+  // Stable mutation callback for pinning
+  const handleTogglePin = useCallback(async (id: string) => {
+    const current = itemsRef.current.find((item) => item.id === id)
+    if (!current) return
+    const target = !current.pinned
+
+    // Immediate optimistic update in UI
+    const optimistic: NoteItem = { ...current, pinned: target }
+    setItems((currentItems) => {
+      const next = currentItems.map((item) => (item.id === id ? optimistic : item))
+      return [...next].sort((a, b) => compareNoteItems(a, b))
+    })
+
+    try {
+      const updated = await togglePinItemLocalFirst(id, target, current)
+      if (updated) {
+        setItems((currentItems) => {
+          const next = currentItems.map((item) => (item.id === id ? updated : item))
+          return [...next].sort((a, b) => compareNoteItems(a, b))
+        })
+      }
+      setError(null)
+    } catch (error) {
+      // Rollback on failure
+      setItems((currentItems) => {
+        const next = currentItems.map((item) => (item.id === id ? current : item))
+        return [...next].sort((a, b) => compareNoteItems(a, b))
+      })
+      setError(
+        error instanceof Error ? error.message : 'Failed to update pin.',
+      )
+    }
+  }, [])
+
   function openComposer() {
     setEditingItem(null)
     setComposerOpen(true)
@@ -346,11 +413,18 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     setEditingItem(null)
   }
 
-  function handleSave(title: string, content: string, type: ItemType) {
+  function handleSave(
+    title: string,
+    content: string,
+    type: ItemType,
+    color?: NoteColor,
+    tags?: string[],
+    pinned?: boolean,
+  ) {
     if (editingItem) {
-      void handleUpdate(title, content, type)
+      void handleUpdate(title, content, type, color, tags, pinned)
     } else {
-      void handleCreate(title, content, type)
+      void handleCreate(title, content, type, color, tags, pinned)
     }
   }
 
@@ -416,6 +490,32 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
 
       <FilterTabs value={filter} onChange={setFilter} />
 
+      {/* Tag filter bar */}
+      {allTags.length > 0 && (
+        <div className="tag-filter-bar" aria-label="Filter by tag">
+          <span className="tag-filter-label">Tags:</span>
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              className={`tag-filter-chip ${selectedTag === tag ? 'active' : ''}`}
+              onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+            >
+              #{tag}
+            </button>
+          ))}
+          {selectedTag && (
+            <button
+              type="button"
+              className="tag-filter-clear"
+              onClick={() => setSelectedTag(null)}
+            >
+              Clear tag
+            </button>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="status-bar error" role="alert">
           <span>{error}</span>
@@ -444,6 +544,7 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
                   item={item}
                   onDelete={handleDelete}
                   onToggleTask={handleToggle}
+                  onTogglePin={handleTogglePin}
                   onEdit={openEditor}
                 />
               ))}
@@ -464,6 +565,9 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
             initialTitle={editingItem?.title}
             initialContent={editingItem?.content}
             initialType={editingItem?.type}
+            initialColor={editingItem?.color}
+            initialTags={editingItem?.tags}
+            initialPinned={editingItem?.pinned}
           />
         )}
       </AnimatePresence>

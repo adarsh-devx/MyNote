@@ -1,4 +1,4 @@
-import type { ItemType } from '../types/note'
+import type { ItemType, NoteColor } from '../types/note'
 
 /**
  * Offline-first foundation types (Phase 0).
@@ -43,6 +43,9 @@ export interface LocalItem {
   content: string
   type: ItemType
   completed: boolean
+  pinned?: boolean
+  color?: NoteColor
+  tags?: string[]
   /**
    * Server-side notification lifecycle ('pending' | 'delivered'); preserved
    * on pull so the existing Tauri notification flow keeps working unchanged.
@@ -62,6 +65,7 @@ export type SyncOperationType =
   | 'create'
   | 'update'
   | 'toggle'
+  | 'pin'
   | 'soft-delete'
   | 'restore'
   | 'permanent-delete'
@@ -79,11 +83,19 @@ export interface UpdateOperationPayload {
   title?: string
   content?: string
   type?: ItemType
+  pinned?: boolean
+  color?: NoteColor
+  tags?: string[]
 }
 
 /** Absolute completed value (not a delta), so replay is idempotent. */
 export interface ToggleOperationPayload {
   completed: boolean
+}
+
+/** Absolute pinned value (not a delta), so replay is idempotent. */
+export interface PinOperationPayload {
+  pinned: boolean
 }
 
 /** Payload for queue operations that carry no extra data. */
@@ -94,6 +106,7 @@ export type SyncOperationPayload =
   | CreateOperationPayload
   | UpdateOperationPayload
   | ToggleOperationPayload
+  | PinOperationPayload
   | EmptyOperationPayload
 
 export interface SyncQueueItemBase {
@@ -122,6 +135,7 @@ export type SyncQueueItem = SyncQueueItemBase &
     | { type: 'create'; payload: CreateOperationPayload }
     | { type: 'update'; payload: UpdateOperationPayload }
     | { type: 'toggle'; payload: ToggleOperationPayload }
+    | { type: 'pin'; payload: PinOperationPayload }
     | { type: 'soft-delete'; payload: EmptyOperationPayload }
     | { type: 'restore'; payload: EmptyOperationPayload }
     | { type: 'permanent-delete'; payload: EmptyOperationPayload }

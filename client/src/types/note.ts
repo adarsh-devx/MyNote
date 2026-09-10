@@ -1,4 +1,5 @@
 export type ItemType = 'task' | 'note'
+export type NoteColor = 'default' | 'yellow' | 'coral' | 'mint' | 'sky' | 'lavender'
 
 export interface NoteItem {
   id: string
@@ -6,6 +7,9 @@ export interface NoteItem {
   content: string
   type: ItemType
   completed: boolean
+  pinned?: boolean
+  color?: NoteColor
+  tags?: string[]
   notificationState?: 'pending' | 'delivered'
   deletedAt?: string | null
   createdAt?: string
@@ -19,4 +23,4 @@ export interface NoteItem {
   clientId?: string
 }
 
-export type ItemFilter = 'all' | 'tasks' | 'notes' | 'completed'
+export type ItemFilter = 'all' | 'tasks' | 'notes' | 'completed' | 'pinned'

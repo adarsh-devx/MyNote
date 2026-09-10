@@ -442,6 +442,9 @@ async function processOperation(op: SyncQueueItem): Promise<OperationResult> {
       case 'toggle':
         await api.updateItem(serverId, { completed: op.payload.completed })
         break
+      case 'pin':
+        await api.updateItem(serverId, { pinned: op.payload.pinned })
+        break
       case 'soft-delete':
         // 404 (already deleted) is treated as success by the API client.
         await api.deleteItem(serverId)

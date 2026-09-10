@@ -5,6 +5,7 @@
 
 export type ItemType = 'note' | 'task'
 export type NotificationState = 'pending' | 'delivered'
+export type NoteColor = 'default' | 'yellow' | 'coral' | 'mint' | 'sky' | 'lavender'
 
 /**
  * Validated payload for POST /api/items.
@@ -17,6 +18,9 @@ export interface CreateItemInput {
   title: string
   content: string
   type: ItemType
+  pinned?: boolean
+  color?: NoteColor
+  tags?: string[]
   clientRequestId?: string
 }
 
@@ -26,6 +30,9 @@ export interface UpdateItemInput {
   content?: string
   type?: ItemType
   completed?: boolean
+  pinned?: boolean
+  color?: NoteColor
+  tags?: string[]
 }
 
 /** Shape returned by all item endpoints (identical to the Phase 2 response). */
@@ -35,6 +42,9 @@ export interface ItemDTO {
   content: string
   type: ItemType
   completed: boolean
+  pinned?: boolean
+  color?: NoteColor
+  tags?: string[]
   notificationState: NotificationState
   deletedAt: string | null
   createdAt: string | null

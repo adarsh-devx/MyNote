@@ -7,6 +7,7 @@ interface FilterTabsProps {
 
 const filters: Array<[ItemFilter, string]> = [
   ['all', 'All'],
+  ['pinned', '📌 Pinned'],
   ['tasks', 'Tasks'],
   ['notes', 'Notes'],
   ['completed', '✓ Completed'],
