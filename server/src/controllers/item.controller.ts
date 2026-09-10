@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import type { Item } from '../models/Item.js'
 import * as itemService from '../services/item.service.js'
+import { addSSEClient, broadcastSSE, removeSSEClient } from '../services/sse.service.js'
 import type { CreateItemInput, ItemDTO, UpdateItemInput } from '../types/item.js'
 import { getCurrentUserId } from '../utils/current-user.js'
 
@@ -28,6 +29,26 @@ function toItemDTO(item: Item): ItemDTO {
   }
 }
 
+export function streamItemEvents(req: Request, res: Response): void {
+  const userId = getCurrentUserId(req)
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders()
+
+  addSSEClient(userId, res)
+  res.write(`data: ${JSON.stringify({ type: 'CONNECTED' })}\n\n`)
+
+  const heartbeat = setInterval(() => {
+    res.write(': ping\n\n')
+  }, 20000)
+
+  req.on('close', () => {
+    clearInterval(heartbeat)
+    removeSSEClient(userId, res)
+  })
+}
+
 export async function getItems(
   req: Request,
   res: Response,
@@ -47,8 +68,10 @@ export async function createItem(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const userId = getCurrentUserId(req)
     const data = res.locals.validatedBody as CreateItemInput
-    const item = await itemService.createItem(getCurrentUserId(req), data)
+    const item = await itemService.createItem(userId, data)
+    broadcastSSE(userId, { type: 'ITEMS_UPDATED' })
     res.status(201).json(toItemDTO(item))
   } catch (error) {
     next(error)
@@ -61,10 +84,11 @@ export async function updateItem(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const userId = getCurrentUserId(req)
     const data = res.locals.validatedBody as UpdateItemInput
     const itemId = req.params.id as string
     const item = await itemService.updateItem(
-      getCurrentUserId(req),
+      userId,
       itemId,
       data,
     )
@@ -72,6 +96,7 @@ export async function updateItem(
       res.status(404).json({ error: 'Item not found.' })
       return
     }
+    broadcastSSE(userId, { type: 'ITEMS_UPDATED' })
     res.json(toItemDTO(item))
   } catch (error) {
     next(error)
@@ -85,12 +110,14 @@ export async function deleteItem(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const userId = getCurrentUserId(req)
     const itemId = req.params.id as string
-    const deleted = await itemService.deleteItem(getCurrentUserId(req), itemId)
+    const deleted = await itemService.deleteItem(userId, itemId)
     if (!deleted) {
       res.status(404).json({ error: 'Item not found.' })
       return
     }
+    broadcastSSE(userId, { type: 'ITEMS_UPDATED' })
     res.json({ message: 'Item deleted successfully.' })
   } catch (error) {
     next(error)
@@ -118,12 +145,14 @@ export async function restoreItem(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const userId = getCurrentUserId(req)
     const itemId = req.params.id as string
-    const item = await itemService.restoreItem(getCurrentUserId(req), itemId)
+    const item = await itemService.restoreItem(userId, itemId)
     if (!item) {
       res.status(404).json({ error: 'Item not found.' })
       return
     }
+    broadcastSSE(userId, { type: 'ITEMS_UPDATED' })
     res.json(toItemDTO(item))
   } catch (error) {
     next(error)
@@ -137,15 +166,17 @@ export async function permanentDeleteItem(
   next: NextFunction,
 ): Promise<void> {
   try {
+    const userId = getCurrentUserId(req)
     const itemId = req.params.id as string
     const deleted = await itemService.permanentDeleteItem(
-      getCurrentUserId(req),
+      userId,
       itemId,
     )
     if (!deleted) {
       res.status(404).json({ error: 'Item not found.' })
       return
     }
+    broadcastSSE(userId, { type: 'ITEMS_UPDATED' })
     res.json({ message: 'Item permanently deleted.' })
   } catch (error) {
     next(error)
@@ -159,7 +190,9 @@ export async function emptyTrash(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const count = await itemService.emptyTrash(getCurrentUserId(req))
+    const userId = getCurrentUserId(req)
+    const count = await itemService.emptyTrash(userId)
+    broadcastSSE(userId, { type: 'ITEMS_UPDATED' })
     res.json({ message: 'Trash emptied successfully.', count })
   } catch (error) {
     next(error)

@@ -144,16 +144,48 @@ export function Home({ user, onLogout, onUserUpdated }: HomeProps) {
     return () => setRemoteChangeListener(null)
   }, [refreshItems])
 
-  // Live cross-device real-time sync poller: pulls authoritative server items
-  // every 3.5 seconds whenever tab/window is visible so actions on another device
-  // (e.g. phone -> desktop or desktop -> phone) sync seamlessly in real-time.
+  // Instant real-time push synchronization via Server-Sent Events (SSE):
+  // When any device creates/edits/deletes a note, server immediately broadcasts
+  // an event to all user connections -> UI updates across all devices in <100ms.
+  useEffect(() => {
+    let eventSource: EventSource | null = null
+
+    try {
+      eventSource = new EventSource(`${api.BASE_URL}/items/stream`, {
+        withCredentials: true,
+      })
+
+      eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data) as { type: string }
+          if (payload.type === 'ITEMS_UPDATED') {
+            void refreshItems(true)
+          }
+        } catch {}
+      }
+
+      eventSource.onerror = () => {
+        // EventSource will automatically retry connecting
+      }
+    } catch (err) {
+      console.warn('[SSE] EventSource setup failed:', err)
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close()
+      }
+    }
+  }, [refreshItems])
+
+  // Live fallback background sync poller: polls every 10 seconds as a safety net
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') {
         void refreshItems(true)
         void syncNow()
       }
-    }, 3500)
+    }, 10000)
     return () => clearInterval(timer)
   }, [refreshItems])
 

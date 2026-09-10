@@ -9,6 +9,7 @@ import {
   markNotificationsDelivered,
   permanentDeleteItem,
   restoreItem,
+  streamItemEvents,
   updateItem,
 } from '../controllers/item.controller.js'
 import { requireAuth } from '../middleware/auth.js'
@@ -21,6 +22,7 @@ import {
 
 const router = Router()
 
+router.get('/stream', requireAuth, streamItemEvents)
 router.get('/', requireAuth, apiRateLimiter, getItems)
 router.get('/deleted', requireAuth, apiRateLimiter, getDeletedItems)
 router.delete('/deleted/all', requireAuth, apiRateLimiter, emptyTrash)
